@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" //nolint:gosec
 
 	metrics "code.cloudfoundry.org/go-metric-registry"
 	v1 "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
