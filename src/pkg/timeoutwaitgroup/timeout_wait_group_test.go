@@ -17,7 +17,7 @@ var _ = Describe("TimeoutWaitGroup", func() {
 		startTime := time.Now()
 		waiter.Wait()
 
-		Expect(time.Now().Sub(startTime)).To(BeNumerically("<", 100*time.Millisecond))
+		Expect(time.Since(startTime)).To(BeNumerically("<", 100*time.Millisecond))
 	}, 1)
 
 	It("blocks for up to the timeout if there is something to wait on", func(done Done) {
@@ -29,7 +29,7 @@ var _ = Describe("TimeoutWaitGroup", func() {
 
 		startTime := time.Now()
 		waiter.Wait()
-		Expect(time.Now().Sub(startTime)).To(BeNumerically(">", 50*time.Millisecond))
+		Expect(time.Since(startTime)).To(BeNumerically(">", 50*time.Millisecond))
 	}, 1)
 
 	It("returns before the timeout if everything finishes", func(done Done) {
@@ -44,6 +44,6 @@ var _ = Describe("TimeoutWaitGroup", func() {
 			waiter.Done()
 		}()
 		waiter.Wait()
-		Expect(time.Now().Sub(startTime)).To(BeNumerically("<", 100*time.Millisecond))
+		Expect(time.Since(startTime)).To(BeNumerically("<", 100*time.Millisecond))
 	}, 1)
 })
