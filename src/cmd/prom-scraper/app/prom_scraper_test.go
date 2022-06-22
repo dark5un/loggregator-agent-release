@@ -635,7 +635,7 @@ func newSpyAgent(testCerts *testhelper.TestCerts) *spyAgent {
 	grpcServer := grpc.NewServer(grpc.Creds(serverCreds))
 	loggregator_v2.RegisterIngressServer(grpcServer, agent)
 
-	go grpcServer.Serve(lis)
+	go grpcServer.Serve(lis) //nolint:errcheck
 
 	return agent
 }
