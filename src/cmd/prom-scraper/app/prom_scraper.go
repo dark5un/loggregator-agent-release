@@ -116,7 +116,8 @@ func (p *PromScraper) startScraper(scrapeConfig scraper.PromScraperConfig, ingre
 	defer p.wg.Done()
 
 	s := p.buildScraper(scrapeConfig, ingressClient)
-	ticker := time.Tick(scrapeConfig.ScrapeInterval)
+	ticker := time.NewTicker(scrapeConfig.ScrapeInterval)
+	defer ticker.Stop()
 
 	failedScrapesTotal := p.m.NewCounter(
 		"failed_scrapes_total",
@@ -127,7 +128,7 @@ func (p *PromScraper) startScraper(scrapeConfig scraper.PromScraperConfig, ingre
 	hadError := false
 	for {
 		select {
-		case <-ticker:
+		case <-ticker.C:
 			if err := s.Scrape(); err != nil {
 				hadError = true
 				failedScrapesTotal.Add(1)
