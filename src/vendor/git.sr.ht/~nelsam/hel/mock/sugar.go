@@ -4,9 +4,12 @@
 
 package mock
 
-import "go/ast"
+import (
+	"context"
+	"go/ast"
+)
 
-func selectors(receiver string, fields ...string) *ast.SelectorExpr {
+func selectors(ctx context.Context, receiver string, fields ...string) *ast.SelectorExpr {
 	if len(fields) == 0 {
 		return nil
 	}
