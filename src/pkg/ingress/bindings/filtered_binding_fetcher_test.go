@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net"
+	"time"
 
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/syslog"
@@ -198,10 +199,11 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		var mockic *mockIPChecker
 
 		BeforeEach(func() {
+			t := GinkgoT()
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
-			mockic = newMockIPChecker()
+			mockic = newMockIPChecker(t, time.Second*10)
 			mockic.ResolveAddrOutput.Ret0 <- net.IP{}
 			mockic.ResolveAddrOutput.Ret1 <- errors.New("oof ouch ip not resolved")
 		})

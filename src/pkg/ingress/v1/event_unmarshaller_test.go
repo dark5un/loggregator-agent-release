@@ -1,6 +1,8 @@
 package v1_test
 
 import (
+	"time"
+
 	ingress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
@@ -18,7 +20,8 @@ var _ = Describe("EventUnmarshaller", func() {
 	)
 
 	BeforeEach(func() {
-		mockWriter = newMockEnvelopeWriter()
+		t := GinkgoT()
+		mockWriter = newMockEnvelopeWriter(t, time.Second*10)
 
 		unmarshaller = ingress.NewUnMarshaller(mockWriter)
 		event = &events.Envelope{

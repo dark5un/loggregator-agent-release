@@ -1,6 +1,8 @@
 package v1_test
 
 import (
+	"time"
+
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
@@ -16,7 +18,8 @@ var _ = Describe("EventWriter", func() {
 	)
 
 	BeforeEach(func() {
-		mockWriter = newMockEnvelopeWriter()
+		t := GinkgoT()
+		mockWriter = newMockEnvelopeWriter(t, time.Second*10)
 		eventWriter = egress.New("Africa")
 	})
 

@@ -1,6 +1,8 @@
 package v1_test
 
 import (
+	"time"
+
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
@@ -11,7 +13,8 @@ import (
 
 var _ = Describe("Tagger", func() {
 	It("tags events with the given deployment name, job, index and IP address", func() {
-		mockWriter := newMockEnvelopeWriter()
+		t := GinkgoT()
+		mockWriter := newMockEnvelopeWriter(t, time.Second*10)
 		t := egress.NewTagger(
 			"test-deployment",
 			"test-job",
@@ -54,7 +57,8 @@ var _ = Describe("Tagger", func() {
 		)
 
 		BeforeEach(func() {
-			mockWriter = newMockEnvelopeWriter()
+			t := GinkgoT()
+			mockWriter = newMockEnvelopeWriter(t, time.Second*10)
 			t = egress.NewTagger(
 				"test-deployment",
 				"test-job",

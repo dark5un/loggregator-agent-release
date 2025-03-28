@@ -19,7 +19,8 @@ var _ = Describe("MessageAggregator", func() {
 	)
 
 	BeforeEach(func() {
-		mockWriter = newMockEnvelopeWriter()
+		t := GinkgoT()
+		mockWriter = newMockEnvelopeWriter(t, time.Second*10)
 		messageAggregator = egress.NewAggregator(
 			mockWriter,
 		)

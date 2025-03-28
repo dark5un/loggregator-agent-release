@@ -1,6 +1,8 @@
 package v1_test
 
 import (
+	"time"
+
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
@@ -18,7 +20,8 @@ var _ = Describe("EventMarshaller", func() {
 	)
 
 	BeforeEach(func() {
-		mockChainWriter = newMockBatchChainByteWriter()
+		t := GinkgoT()
+		mockChainWriter = newMockBatchChainByteWriter(t, time.Second*10)
 		metricClient = metricsHelpers.NewMetricsRegistry()
 	})
 
@@ -84,7 +87,8 @@ var _ = Describe("EventMarshaller", func() {
 
 	Describe("SetWriter", func() {
 		It("writes to the new writer", func() {
-			newWriter := newMockBatchChainByteWriter()
+			t := GinkgoT()
+			newWriter := newMockBatchChainByteWriter(t, time.Second*10)
 			close(newWriter.WriteOutput.Err)
 			marshaller.SetWriter(newWriter)
 

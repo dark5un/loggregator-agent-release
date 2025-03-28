@@ -14,11 +14,12 @@ import (
 
 var _ = Describe("Transponder", func() {
 	It("reads from the buffer to the writer", func() {
+		t := GinkgoT()
 		envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-		nexter := newMockNexter()
+		nexter := newMockNexter(t, time.Second*10)
 		nexter.TryNextOutput.Ret0 <- envelope
 		nexter.TryNextOutput.Ret1 <- true
-		writer := newMockBatchWriter()
+		writer := newMockBatchWriter(t, time.Second*10)
 		close(writer.WriteOutput.Ret0)
 
 		spy := metricsHelpers.NewMetricsRegistry()
@@ -32,9 +33,10 @@ var _ = Describe("Transponder", func() {
 
 	Describe("batching", func() {
 		It("emits once the batch count has been reached", func() {
+			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter()
-			writer := newMockBatchWriter()
+			nexter := newMockNexter(t, time.Second*10)
+			writer := newMockBatchWriter(t, time.Second*10)
 			close(writer.WriteOutput.Ret0)
 
 			for i := 0; i < 6; i++ {
@@ -53,9 +55,10 @@ var _ = Describe("Transponder", func() {
 		})
 
 		It("emits once the batch interval has been reached", func() {
+			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter()
-			writer := newMockBatchWriter()
+			nexter := newMockNexter(t, time.Second*10)
+			writer := newMockBatchWriter(t, time.Second*10)
 			close(writer.WriteOutput.Ret0)
 
 			nexter.TryNextOutput.Ret0 <- envelope
@@ -74,9 +77,10 @@ var _ = Describe("Transponder", func() {
 		})
 
 		It("clears batch upon egress failure", func() {
+			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter()
-			writer := newMockBatchWriter()
+			nexter := newMockNexter(t, time.Second*10)
+			writer := newMockBatchWriter(t, time.Second*10)
 
 			go func() {
 				for {
@@ -99,9 +103,10 @@ var _ = Describe("Transponder", func() {
 		})
 
 		It("emits egress and dropped metric", func() {
+			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter()
-			writer := newMockBatchWriter()
+			nexter := newMockNexter(t, time.Second*10)
+			writer := newMockBatchWriter(t, time.Second*10)
 			close(writer.WriteOutput.Ret0)
 
 			for i := 0; i < 6; i++ {

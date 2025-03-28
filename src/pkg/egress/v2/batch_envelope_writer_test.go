@@ -1,6 +1,8 @@
 package v2_test
 
 import (
+	"time"
+
 	"code.cloudfoundry.org/go-loggregator/v10/rpc/loggregator_v2"
 	v2 "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v2"
 	. "github.com/onsi/ginkgo/v2"
@@ -9,7 +11,8 @@ import (
 
 var _ = Describe("BatchEnvelopeWriter", func() {
 	It("processes each envelope before writing", func() {
-		mockWriter := newMockBatchWriter()
+		t := GinkgoT()
+		mockWriter := newMockBatchWriter(t, time.Second*10)
 		close(mockWriter.WriteOutput.Ret0)
 
 		tagger := v2.NewTagger(nil)
