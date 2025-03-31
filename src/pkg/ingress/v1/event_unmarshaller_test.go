@@ -21,7 +21,7 @@ var _ = Describe("EventUnmarshaller", func() {
 
 	BeforeEach(func() {
 		t := GinkgoT()
-		mockWriter = newMockEnvelopeWriter(t, time.Second*10)
+		mockWriter = newMockEnvelopeWriter(t, time.Minute)
 
 		unmarshaller = ingress.NewUnMarshaller(mockWriter)
 		event = &events.Envelope{
@@ -95,15 +95,16 @@ var _ = Describe("EventUnmarshaller", func() {
 		It("unmarshalls byte arrays and writes to an EnvelopeWriter", func() {
 			unmarshaller.Write(message)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			Expect(proto.Equal(<-mockWriter.WriteInput.Event, event)).To(BeTrue())
+			var receivedEvent *events.Envelope
+			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&receivedEvent))
+			Expect(proto.Equal(receivedEvent, event)).To(BeTrue())
 		})
 
 		It("returns an error when it can't unmarshal", func() {
 			message = []byte("Bad Message")
 			unmarshaller.Write(message)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(0))
+			Consistently(mockWriter.method.Write.Method.In()).ShouldNot(Receive())
 		})
 	})
 })

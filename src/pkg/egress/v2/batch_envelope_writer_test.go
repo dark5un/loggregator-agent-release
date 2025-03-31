@@ -12,8 +12,8 @@ import (
 var _ = Describe("BatchEnvelopeWriter", func() {
 	It("processes each envelope before writing", func() {
 		t := GinkgoT()
-		mockWriter := newMockBatchWriter(t, time.Second*10)
-		close(mockWriter.WriteOutput.Ret0)
+		mockWriter := newMockBatchWriter(t, time.Minute)
+		close(mockWriter.method.Write.Method.Out())
 
 		tagger := v2.NewTagger(nil)
 		ew := v2.NewBatchEnvelopeWriter(mockWriter, v2.NewCounterAggregator(tagger.TagEnvelope))
@@ -25,7 +25,7 @@ var _ = Describe("BatchEnvelopeWriter", func() {
 		Expect(ew.Write(envs)).ToNot(HaveOccurred())
 
 		var batch []*loggregator_v2.Envelope
-		Eventually(mockWriter.WriteInput.Msgs).Should(Receive(&batch))
+		Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&batch))
 
 		Expect(batch).To(HaveLen(2))
 		Expect(batch[0].GetCounter().GetTotal()).To(Equal(uint64(10)))

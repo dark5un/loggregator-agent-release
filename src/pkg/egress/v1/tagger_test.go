@@ -14,8 +14,8 @@ import (
 var _ = Describe("Tagger", func() {
 	It("tags events with the given deployment name, job, index and IP address", func() {
 		t := GinkgoT()
-		mockWriter := newMockEnvelopeWriter(t, time.Second*10)
-		t := egress.NewTagger(
+		mockWriter := newMockEnvelopeWriter(t, time.Minute)
+		tagger := egress.NewTagger(
 			"test-deployment",
 			"test-job",
 			"2",
@@ -31,9 +31,10 @@ var _ = Describe("Tagger", func() {
 			},
 		}
 
-		t.Write(envelope)
+		tagger.Write(envelope)
 
-		Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
+		var receivedEvent *events.Envelope
+		Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&receivedEvent))
 		expected := &events.Envelope{
 			EventType: events.Envelope_ValueMetric.Enum(),
 			ValueMetric: &events.ValueMetric{
@@ -46,20 +47,20 @@ var _ = Describe("Tagger", func() {
 			Index:      proto.String("2"),
 			Ip:         proto.String("123.123.123.123"),
 		}
-		Eventually(<-mockWriter.WriteInput.Event).Should(Equal(expected))
+		Eventually(receivedEvent).Should(Equal(expected))
 	})
 
 	Context("doesn't overwrite", func() {
 		var (
 			mockWriter *mockEnvelopeWriter
-			t          *egress.Tagger
+			tagger     *egress.Tagger
 			envelope   *events.Envelope
 		)
 
 		BeforeEach(func() {
 			t := GinkgoT()
-			mockWriter = newMockEnvelopeWriter(t, time.Second*10)
-			t = egress.NewTagger(
+			mockWriter = newMockEnvelopeWriter(t, time.Minute)
+			tagger = egress.NewTagger(
 				"test-deployment",
 				"test-job",
 				"2",
@@ -79,37 +80,37 @@ var _ = Describe("Tagger", func() {
 
 		It("when deployment is already set", func() {
 			envelope.Deployment = proto.String("another-deployment")
-			t.Write(envelope)
+			tagger.Write(envelope)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
+			var writtenEnvelope *events.Envelope
+			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Deployment).Should(Equal("another-deployment"))
 		})
 
 		It("when job is already set", func() {
 			envelope.Job = proto.String("another-job")
-			t.Write(envelope)
+			tagger.Write(envelope)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
+			var writtenEnvelope *events.Envelope
+			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Job).Should(Equal("another-job"))
 		})
 
 		It("when index is already set", func() {
 			envelope.Index = proto.String("3")
-			t.Write(envelope)
+			tagger.Write(envelope)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
+			var writtenEnvelope *events.Envelope
+			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Index).Should(Equal("3"))
 		})
 
 		It("when ip is already set", func() {
 			envelope.Ip = proto.String("1.1.1.1")
-			t.Write(envelope)
+			tagger.Write(envelope)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
+			var writtenEnvelope *events.Envelope
+			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Ip).Should(Equal("1.1.1.1"))
 		})
 	})

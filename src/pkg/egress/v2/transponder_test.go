@@ -16,32 +16,30 @@ var _ = Describe("Transponder", func() {
 	It("reads from the buffer to the writer", func() {
 		t := GinkgoT()
 		envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-		nexter := newMockNexter(t, time.Second*10)
-		nexter.TryNextOutput.Ret0 <- envelope
-		nexter.TryNextOutput.Ret1 <- true
-		writer := newMockBatchWriter(t, time.Second*10)
-		close(writer.WriteOutput.Ret0)
+		nexter := newMockNexter(t, time.Minute)
+		nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
+		writer := newMockBatchWriter(t, time.Minute)
+		close(writer.method.Write.Method.Out())
 
 		spy := metricsHelpers.NewMetricsRegistry()
 
 		tx := egress.NewTransponder(nexter, writer, 1, time.Nanosecond, spy)
 		go tx.Start()
 
-		Eventually(nexter.TryNextCalled).Should(Receive())
-		Eventually(writer.WriteInput.Msgs).Should(Receive(Equal([]*loggregator_v2.Envelope{envelope})))
+		Eventually(nexter.method.TryNext.Method.In()).Should(Receive())
+		Eventually(writer.method.Write.Method.In()).Should(Receive(Equal([]*loggregator_v2.Envelope{envelope})))
 	})
 
 	Describe("batching", func() {
 		It("emits once the batch count has been reached", func() {
 			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Second*10)
-			writer := newMockBatchWriter(t, time.Second*10)
-			close(writer.WriteOutput.Ret0)
+			nexter := newMockNexter(t, time.Minute)
+			writer := newMockBatchWriter(t, time.Minute)
+			close(writer.method.Write.Method.Out())
 
 			for i := 0; i < 6; i++ {
-				nexter.TryNextOutput.Ret0 <- envelope
-				nexter.TryNextOutput.Ret1 <- true
+				nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
 			}
 
 			spy := metricsHelpers.NewMetricsRegistry()
@@ -50,21 +48,19 @@ var _ = Describe("Transponder", func() {
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
-			Eventually(writer.WriteInput.Msgs).Should(Receive(&batch))
+			Eventually(writer.method.Write.Method.In()).Should(Receive(&batch))
 			Expect(batch).To(HaveLen(5))
 		})
 
 		It("emits once the batch interval has been reached", func() {
 			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Second*10)
-			writer := newMockBatchWriter(t, time.Second*10)
-			close(writer.WriteOutput.Ret0)
+			nexter := newMockNexter(t, time.Minute)
+			writer := newMockBatchWriter(t, time.Minute)
+			close(writer.method.Write.Method.Out())
 
-			nexter.TryNextOutput.Ret0 <- envelope
-			nexter.TryNextOutput.Ret1 <- true
-			close(nexter.TryNextOutput.Ret0)
-			close(nexter.TryNextOutput.Ret1)
+			nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
+			close(nexter.method.TryNext.Method.Out())
 
 			spy := metricsHelpers.NewMetricsRegistry()
 
@@ -72,25 +68,24 @@ var _ = Describe("Transponder", func() {
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
-			Eventually(writer.WriteInput.Msgs).Should(Receive(&batch))
+			Eventually(writer.method.Write.Method.In()).Should(Receive(&batch))
 			Expect(batch).To(HaveLen(1))
 		})
 
 		It("clears batch upon egress failure", func() {
 			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Second*10)
-			writer := newMockBatchWriter(t, time.Second*10)
+			nexter := newMockNexter(t, time.Minute)
+			writer := newMockBatchWriter(t, time.Minute)
 
 			go func() {
 				for {
-					writer.WriteOutput.Ret0 <- errors.New("some-error")
+					writer.method.Write.Method.Out() <- mockBatchWriter_Write_Out{Ret0: errors.New("some-error")}
 				}
 			}()
 
 			for i := 0; i < 6; i++ {
-				nexter.TryNextOutput.Ret0 <- envelope
-				nexter.TryNextOutput.Ret1 <- true
+				nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
 			}
 
 			spy := metricsHelpers.NewMetricsRegistry()
@@ -98,20 +93,19 @@ var _ = Describe("Transponder", func() {
 			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, spy)
 			go tx.Start()
 
-			Eventually(writer.WriteCalled).Should(HaveLen(1))
-			Consistently(writer.WriteCalled).Should(HaveLen(1))
+			Eventually(writer.method.Write.Method.In()).Should(HaveLen(1))
+			Consistently(writer.method.Write.Method.In()).Should(HaveLen(1))
 		})
 
 		It("emits egress and dropped metric", func() {
 			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Second*10)
-			writer := newMockBatchWriter(t, time.Second*10)
-			close(writer.WriteOutput.Ret0)
+			nexter := newMockNexter(t, time.Minute)
+			writer := newMockBatchWriter(t, time.Minute)
+			close(writer.method.Write.Method.Out())
 
 			for i := 0; i < 6; i++ {
-				nexter.TryNextOutput.Ret0 <- envelope
-				nexter.TryNextOutput.Ret1 <- true
+				nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
 			}
 
 			spy := metricsHelpers.NewMetricsRegistry()

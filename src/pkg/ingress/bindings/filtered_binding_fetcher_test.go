@@ -203,9 +203,8 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
-			mockic = newMockIPChecker(t, time.Second*10)
-			mockic.ResolveAddrOutput.Ret0 <- net.IP{}
-			mockic.ResolveAddrOutput.Ret1 <- errors.New("oof ouch ip not resolved")
+			mockic = newMockIPChecker(t, time.Minute)
+			mockic.method.ResolveAddr.Method.Out() <- mockIPChecker_ResolveAddr_Out{Ret0: net.IP{}, Ret1: errors.New("oof ouch ip not resolved")}
 		})
 
 		JustBeforeEach(func() {
@@ -234,7 +233,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			actual, err := filter.FetchBindings()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Eventually(mockic.ResolveAddrCalled).Should(Receive())
+			Eventually(mockic.method.ResolveAddr.Method.In()).Should(Receive())
 			Expect(logBuffer.String()).Should(MatchRegexp("Cannot resolve ip address for syslog drain with url"))
 			Expect(logBuffer.String()).ToNot(MatchRegexp("Skipped resolve ip address for syslog drain with url"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
@@ -242,7 +241,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			actual, err = filter.FetchBindings()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(BeEmpty())
-			Consistently(mockic.ResolveAddrCalled).ShouldNot(Receive())
+			Consistently(mockic.method.ResolveAddr.Method.In()).ShouldNot(Receive())
 			Expect(logBuffer.String()).Should(MatchRegexp("Skipped resolve ip address for syslog drain with url"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
 		})

@@ -20,36 +20,6 @@ var (
 	_ = vegr.EnforceVersion(vegr.MaxVersion - 7)
 )
 
-type mockBatchWriter_Write_In struct {
-	Msgs []*loggregator_v2.Envelope
-}
-type mockBatchWriter_Write_Out struct {
-	Panic_ any
-	Ret0   error
-}
-type mockBatchWriter_Write struct {
-	vegr.Method[mockBatchWriter_Write_In, mockBatchWriter_Write_Out]
-}
-type mockBatchWriter struct {
-	t       vegr.TestingT
-	timeout time.Duration
-	method  struct {
-		Write mockBatchWriter_Write
-	}
-}
-
-func newMockBatchWriter(t vegr.TestingT, timeout time.Duration) *mockBatchWriter {
-	m := &mockBatchWriter{t: t, timeout: timeout}
-	m.method.Write.Method = vegr.NewMethod[mockBatchWriter_Write_In, mockBatchWriter_Write_Out]("mockBatchWriter", "Write", 100)
-	return m
-}
-func (m *mockBatchWriter) Write(msgs []*loggregator_v2.Envelope) (ret0 error) {
-	m.t.Helper()
-	m.method.Write.In() <- mockBatchWriter_Write_In{Msgs: msgs}
-	vegr.PopulateReturns(m.t, m.timeout, m.method.Write, &ret0)
-	return ret0
-}
-
 type mockEnvelopeProcessor_Process_In struct {
 	Arg0 *loggregator_v2.Envelope
 }
@@ -77,6 +47,36 @@ func (m *mockEnvelopeProcessor) Process(arg0 *loggregator_v2.Envelope) (ret0 err
 	m.t.Helper()
 	m.method.Process.In() <- mockEnvelopeProcessor_Process_In{Arg0: arg0}
 	vegr.PopulateReturns(m.t, m.timeout, m.method.Process, &ret0)
+	return ret0
+}
+
+type mockBatchWriter_Write_In struct {
+	Msgs []*loggregator_v2.Envelope
+}
+type mockBatchWriter_Write_Out struct {
+	Panic_ any
+	Ret0   error
+}
+type mockBatchWriter_Write struct {
+	vegr.Method[mockBatchWriter_Write_In, mockBatchWriter_Write_Out]
+}
+type mockBatchWriter struct {
+	t       vegr.TestingT
+	timeout time.Duration
+	method  struct {
+		Write mockBatchWriter_Write
+	}
+}
+
+func newMockBatchWriter(t vegr.TestingT, timeout time.Duration) *mockBatchWriter {
+	m := &mockBatchWriter{t: t, timeout: timeout}
+	m.method.Write.Method = vegr.NewMethod[mockBatchWriter_Write_In, mockBatchWriter_Write_Out]("mockBatchWriter", "Write", 100)
+	return m
+}
+func (m *mockBatchWriter) Write(msgs []*loggregator_v2.Envelope) (ret0 error) {
+	m.t.Helper()
+	m.method.Write.In() <- mockBatchWriter_Write_In{Msgs: msgs}
+	vegr.PopulateReturns(m.t, m.timeout, m.method.Write, &ret0)
 	return ret0
 }
 
@@ -110,6 +110,36 @@ func (m *mockWriter) Write(arg0 *loggregator_v2.Envelope) (ret0 error) {
 	return ret0
 }
 
+type mockNexter_TryNext_In struct {
+}
+type mockNexter_TryNext_Out struct {
+	Panic_ any
+	Ret0   *loggregator_v2.Envelope
+	Ret1   bool
+}
+type mockNexter_TryNext struct {
+	vegr.Method[mockNexter_TryNext_In, mockNexter_TryNext_Out]
+}
+type mockNexter struct {
+	t       vegr.TestingT
+	timeout time.Duration
+	method  struct {
+		TryNext mockNexter_TryNext
+	}
+}
+
+func newMockNexter(t vegr.TestingT, timeout time.Duration) *mockNexter {
+	m := &mockNexter{t: t, timeout: timeout}
+	m.method.TryNext.Method = vegr.NewMethod[mockNexter_TryNext_In, mockNexter_TryNext_Out]("mockNexter", "TryNext", 100)
+	return m
+}
+func (m *mockNexter) TryNext() (ret0 *loggregator_v2.Envelope, ret1 bool) {
+	m.t.Helper()
+	m.method.TryNext.In() <- mockNexter_TryNext_In{}
+	vegr.PopulateReturns(m.t, m.timeout, m.method.TryNext, &ret0, &ret1)
+	return ret0, ret1
+}
+
 type mockMetricClient_NewCounter_In struct {
 	Name, HelpText string
 	Opts           []metrics.MetricOption
@@ -139,36 +169,6 @@ func (m *mockMetricClient) NewCounter(name, helpText string, opts ...metrics.Met
 	m.method.NewCounter.In() <- mockMetricClient_NewCounter_In{Name: name, HelpText: helpText, Opts: opts}
 	vegr.PopulateReturns(m.t, m.timeout, m.method.NewCounter, &ret0)
 	return ret0
-}
-
-type mockNexter_TryNext_In struct {
-}
-type mockNexter_TryNext_Out struct {
-	Panic_ any
-	Ret0   *loggregator_v2.Envelope
-	Ret1   bool
-}
-type mockNexter_TryNext struct {
-	vegr.Method[mockNexter_TryNext_In, mockNexter_TryNext_Out]
-}
-type mockNexter struct {
-	t       vegr.TestingT
-	timeout time.Duration
-	method  struct {
-		TryNext mockNexter_TryNext
-	}
-}
-
-func newMockNexter(t vegr.TestingT, timeout time.Duration) *mockNexter {
-	m := &mockNexter{t: t, timeout: timeout}
-	m.method.TryNext.Method = vegr.NewMethod[mockNexter_TryNext_In, mockNexter_TryNext_Out]("mockNexter", "TryNext", 100)
-	return m
-}
-func (m *mockNexter) TryNext() (ret0 *loggregator_v2.Envelope, ret1 bool) {
-	m.t.Helper()
-	m.method.TryNext.In() <- mockNexter_TryNext_In{}
-	vegr.PopulateReturns(m.t, m.timeout, m.method.TryNext, &ret0, &ret1)
-	return ret0, ret1
 }
 
 type mockCounter_Add_In struct {
