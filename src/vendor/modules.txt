@@ -25,16 +25,6 @@ code.cloudfoundry.org/tlsconfig/certtest
 ## explicit; go 1.20
 filippo.io/edwards25519
 filippo.io/edwards25519/field
-# git.sr.ht/~nelsam/hel v0.7.0
-## explicit; go 1.22
-git.sr.ht/~nelsam/hel
-git.sr.ht/~nelsam/hel/console
-git.sr.ht/~nelsam/hel/dep
-git.sr.ht/~nelsam/hel/mock
-git.sr.ht/~nelsam/hel/parse
-git.sr.ht/~nelsam/hel/typ
-git.sr.ht/~nelsam/hel/vegr
-git.sr.ht/~nelsam/hel/vegr/ret
 # github.com/andybalholm/brotli v1.1.1
 ## explicit; go 1.13
 github.com/andybalholm/brotli
@@ -77,9 +67,6 @@ github.com/google/pprof/profile
 github.com/grpc-ecosystem/grpc-gateway/v2/internal/httprule
 github.com/grpc-ecosystem/grpc-gateway/v2/runtime
 github.com/grpc-ecosystem/grpc-gateway/v2/utilities
-# github.com/inconshreveable/mousetrap v1.1.0
-## explicit; go 1.18
-github.com/inconshreveable/mousetrap
 # github.com/klauspost/compress v1.18.0
 ## explicit; go 1.22
 github.com/klauspost/compress
@@ -136,8 +123,6 @@ github.com/onsi/gomega/types
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/poy/onpar v1.0.0
-## explicit; go 1.14
 # github.com/prometheus/client_golang v1.21.1
 ## explicit; go 1.21
 github.com/prometheus/client_golang/internal/github.com/golang/gddo/httputil
@@ -158,12 +143,6 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/spf13/cobra v1.8.0
-## explicit; go 1.15
-github.com/spf13/cobra
-# github.com/spf13/pflag v1.0.5
-## explicit; go 1.12
-github.com/spf13/pflag
 # github.com/square/certstrap v1.3.0
 ## explicit; go 1.18
 github.com/square/certstrap/pkix
@@ -209,9 +188,6 @@ golang.org/x/crypto/salsa20/salsa
 golang.org/x/crypto/scrypt
 golang.org/x/crypto/ssh
 golang.org/x/crypto/ssh/internal/bcrypt_pbkdf
-# golang.org/x/mod v0.24.0
-## explicit; go 1.23.0
-golang.org/x/mod/semver
 # golang.org/x/net v0.37.0
 ## explicit; go 1.23.0
 golang.org/x/net/context
@@ -225,9 +201,6 @@ golang.org/x/net/idna
 golang.org/x/net/internal/httpcommon
 golang.org/x/net/internal/timeseries
 golang.org/x/net/trace
-# golang.org/x/sync v0.12.0
-## explicit; go 1.23.0
-golang.org/x/sync/errgroup
 # golang.org/x/sys v0.31.0
 ## explicit; go 1.23.0
 golang.org/x/sys/cpu
@@ -259,24 +232,7 @@ golang.org/x/text/unicode/norm
 ## explicit; go 1.23.0
 golang.org/x/tools/cover
 golang.org/x/tools/go/ast/inspector
-golang.org/x/tools/go/gcexportdata
-golang.org/x/tools/go/packages
-golang.org/x/tools/go/types/objectpath
-golang.org/x/tools/go/types/typeutil
-golang.org/x/tools/internal/aliases
 golang.org/x/tools/internal/astutil/edge
-golang.org/x/tools/internal/event
-golang.org/x/tools/internal/event/core
-golang.org/x/tools/internal/event/keys
-golang.org/x/tools/internal/event/label
-golang.org/x/tools/internal/gcimporter
-golang.org/x/tools/internal/gocommand
-golang.org/x/tools/internal/packagesinternal
-golang.org/x/tools/internal/pkgbits
-golang.org/x/tools/internal/stdlib
-golang.org/x/tools/internal/typeparams
-golang.org/x/tools/internal/typesinternal
-golang.org/x/tools/internal/versions
 # google.golang.org/genproto/googleapis/api v0.0.0-20250313205543-e70fdf4c4cb4
 ## explicit; go 1.23.0
 google.golang.org/genproto/googleapis/api/httpbody
