@@ -203,7 +203,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
-			mockic = newMockIPChecker(t, time.Minute)
+			mockic = newMockIPChecker(t, time.Second*5)
 			mockic.method.ResolveAddr.Method.Out() <- mockIPChecker_ResolveAddr_Out{Ret0: net.IP{}, Ret1: errors.New("oof ouch ip not resolved")}
 		})
 

@@ -1,6 +1,7 @@
 package v1_test
 
 import (
+	"sync"
 	"time"
 
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
@@ -11,19 +12,35 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// SimpleEnvelopeWriter is a simple implementation of EnvelopeWriter
+// that just stores the envelopes it receives for inspection in tests
+type SimpleEnvelopeWriter struct {
+	envelopes chan *events.Envelope
+	mu        sync.Mutex
+}
+
+func NewSimpleEnvelopeWriter() *SimpleEnvelopeWriter {
+	return &SimpleEnvelopeWriter{
+		envelopes: make(chan *events.Envelope, 100),
+	}
+}
+
+func (w *SimpleEnvelopeWriter) Write(envelope *events.Envelope) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.envelopes <- envelope
+}
+
 var _ = Describe("MessageAggregator", func() {
 	var (
-		mockWriter        *mockEnvelopeWriter
+		writer            *SimpleEnvelopeWriter
 		messageAggregator *egress.MessageAggregator
 		originalTTL       time.Duration
 	)
 
 	BeforeEach(func() {
-		t := GinkgoT()
-		mockWriter = newMockEnvelopeWriter(t, time.Minute)
-		messageAggregator = egress.NewAggregator(
-			mockWriter,
-		)
+		writer = NewSimpleEnvelopeWriter()
+		messageAggregator = egress.NewAggregator(writer)
 		originalTTL = egress.MaxTTL
 	})
 
@@ -36,7 +53,7 @@ var _ = Describe("MessageAggregator", func() {
 		messageAggregator.Write(inputMessage)
 
 		var receivedEvent *events.Envelope
-		Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&receivedEvent))
+		Eventually(writer.envelopes).Should(Receive(&receivedEvent))
 		Expect(receivedEvent).To(Equal(inputMessage))
 	})
 
@@ -44,6 +61,7 @@ var _ = Describe("MessageAggregator", func() {
 		inputMessage := createValueMessage()
 		done := make(chan struct{})
 		go func() {
+			defer GinkgoRecover()
 			defer close(done)
 			for i := 0; i < 40; i++ {
 				messageAggregator.Write(inputMessage)
@@ -60,7 +78,7 @@ var _ = Describe("MessageAggregator", func() {
 			messageAggregator.Write(createCounterMessage("total", "fake-origin-4", nil))
 
 			var outputMessage *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&outputMessage))
+			Eventually(writer.envelopes).Should(Receive(&outputMessage))
 			Expect(outputMessage.GetEventType()).To(Equal(events.Envelope_CounterEvent))
 			expectCorrectCounterNameDeltaAndTotal(outputMessage, "total", 4, 4)
 		})
@@ -89,11 +107,11 @@ var _ = Describe("MessageAggregator", func() {
 			))
 
 			var e *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 4)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 8)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 12)
 		})
 
@@ -121,11 +139,11 @@ var _ = Describe("MessageAggregator", func() {
 			))
 
 			var e *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 4)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 0, 101)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 105)
 		})
 
@@ -134,9 +152,9 @@ var _ = Describe("MessageAggregator", func() {
 			messageAggregator.Write(createCounterMessage("total2", "fake-origin-4", nil))
 
 			var e *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total1", 4, 4)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total2", 4, 4)
 		})
 
@@ -174,13 +192,13 @@ var _ = Describe("MessageAggregator", func() {
 			))
 
 			var e *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 4)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 4)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 8)
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			expectCorrectCounterNameDeltaAndTotal(e, "total", 4, 4)
 		})
 
@@ -189,9 +207,9 @@ var _ = Describe("MessageAggregator", func() {
 			messageAggregator.Write(createCounterMessage("counter1", "fake-origin-4", nil))
 
 			var e *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			Expect(e.GetEventType()).To(Equal(events.Envelope_ValueMetric))
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			Expect(e.GetEventType()).To(Equal(events.Envelope_CounterEvent))
 			expectCorrectCounterNameDeltaAndTotal(e, "counter1", 4, 4)
 		})
@@ -202,15 +220,15 @@ var _ = Describe("MessageAggregator", func() {
 			messageAggregator.Write(createCounterMessage("counter1", "fake-origin-4", nil))
 
 			var e *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			Expect(e.GetOrigin()).To(Equal("fake-origin-4"))
 			expectCorrectCounterNameDeltaAndTotal(e, "counter1", 4, 4)
 
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			Expect(e.GetOrigin()).To(Equal("fake-origin-5"))
 			expectCorrectCounterNameDeltaAndTotal(e, "counter1", 4, 4)
 
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&e))
+			Eventually(writer.envelopes).Should(Receive(&e))
 			Expect(e.GetOrigin()).To(Equal("fake-origin-4"))
 			expectCorrectCounterNameDeltaAndTotal(e, "counter1", 4, 8)
 		})

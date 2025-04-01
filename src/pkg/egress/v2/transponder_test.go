@@ -2,6 +2,7 @@ package v2_test
 
 import (
 	"errors"
+	"sync"
 	"time"
 
 	"code.cloudfoundry.org/go-loggregator/v10/rpc/loggregator_v2"
@@ -12,34 +13,97 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// SimpleNexter is a simple implementation of the Nexter interface for testing
+type SimpleNexter struct {
+	mu        sync.Mutex
+	envelopes chan *loggregator_v2.Envelope
+	ok        chan bool
+}
+
+func NewSimpleNexter() *SimpleNexter {
+	return &SimpleNexter{
+		envelopes: make(chan *loggregator_v2.Envelope, 100),
+		ok:        make(chan bool, 100),
+	}
+}
+
+func (n *SimpleNexter) TryNext() (*loggregator_v2.Envelope, bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+
+	select {
+	case env := <-n.envelopes:
+		return env, <-n.ok
+	default:
+		return nil, false
+	}
+}
+
+func (n *SimpleNexter) AddEnvelope(env *loggregator_v2.Envelope, nextOk bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.envelopes <- env
+	n.ok <- nextOk
+}
+
+// SimpleBatchWriter is a simple implementation of the BatchWriter interface for testing
+type SimpleBatchWriter struct {
+	mu      sync.Mutex
+	batches chan []*loggregator_v2.Envelope
+	errors  chan error
+}
+
+func NewSimpleBatchWriter() *SimpleBatchWriter {
+	return &SimpleBatchWriter{
+		batches: make(chan []*loggregator_v2.Envelope, 100),
+		errors:  make(chan error, 100),
+	}
+}
+
+func (w *SimpleBatchWriter) Write(msgs []*loggregator_v2.Envelope) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.batches <- msgs
+
+	select {
+	case err := <-w.errors:
+		return err
+	default:
+		return nil
+	}
+}
+
+func (w *SimpleBatchWriter) AddError(err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.errors <- err
+}
+
 var _ = Describe("Transponder", func() {
 	It("reads from the buffer to the writer", func() {
-		t := GinkgoT()
 		envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-		nexter := newMockNexter(t, time.Minute)
-		nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
-		writer := newMockBatchWriter(t, time.Minute)
-		close(writer.method.Write.Method.Out())
+		nexter := NewSimpleNexter()
+		nexter.AddEnvelope(envelope, true)
+		writer := NewSimpleBatchWriter()
 
 		spy := metricsHelpers.NewMetricsRegistry()
 
 		tx := egress.NewTransponder(nexter, writer, 1, time.Nanosecond, spy)
 		go tx.Start()
 
-		Eventually(nexter.method.TryNext.Method.In()).Should(Receive())
-		Eventually(writer.method.Write.Method.In()).Should(Receive(Equal([]*loggregator_v2.Envelope{envelope})))
+		var batch []*loggregator_v2.Envelope
+		Eventually(writer.batches).Should(Receive(&batch))
+		Expect(batch).To(Equal([]*loggregator_v2.Envelope{envelope}))
 	})
 
 	Describe("batching", func() {
 		It("emits once the batch count has been reached", func() {
-			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Minute)
-			writer := newMockBatchWriter(t, time.Minute)
-			close(writer.method.Write.Method.Out())
+			nexter := NewSimpleNexter()
+			writer := NewSimpleBatchWriter()
 
 			for i := 0; i < 6; i++ {
-				nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
+				nexter.AddEnvelope(envelope, true)
 			}
 
 			spy := metricsHelpers.NewMetricsRegistry()
@@ -48,19 +112,16 @@ var _ = Describe("Transponder", func() {
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
-			Eventually(writer.method.Write.Method.In()).Should(Receive(&batch))
+			Eventually(writer.batches).Should(Receive(&batch))
 			Expect(batch).To(HaveLen(5))
 		})
 
 		It("emits once the batch interval has been reached", func() {
-			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Minute)
-			writer := newMockBatchWriter(t, time.Minute)
-			close(writer.method.Write.Method.Out())
+			nexter := NewSimpleNexter()
+			writer := NewSimpleBatchWriter()
 
-			nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
-			close(nexter.method.TryNext.Method.Out())
+			nexter.AddEnvelope(envelope, true)
 
 			spy := metricsHelpers.NewMetricsRegistry()
 
@@ -68,24 +129,18 @@ var _ = Describe("Transponder", func() {
 			go tx.Start()
 
 			var batch []*loggregator_v2.Envelope
-			Eventually(writer.method.Write.Method.In()).Should(Receive(&batch))
+			Eventually(writer.batches).Should(Receive(&batch))
 			Expect(batch).To(HaveLen(1))
 		})
 
 		It("clears batch upon egress failure", func() {
-			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Minute)
-			writer := newMockBatchWriter(t, time.Minute)
-
-			go func() {
-				for {
-					writer.method.Write.Method.Out() <- mockBatchWriter_Write_Out{Ret0: errors.New("some-error")}
-				}
-			}()
+			nexter := NewSimpleNexter()
+			writer := NewSimpleBatchWriter()
+			writer.AddError(errors.New("some-error"))
 
 			for i := 0; i < 6; i++ {
-				nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
+				nexter.AddEnvelope(envelope, true)
 			}
 
 			spy := metricsHelpers.NewMetricsRegistry()
@@ -93,19 +148,17 @@ var _ = Describe("Transponder", func() {
 			tx := egress.NewTransponder(nexter, writer, 5, time.Minute, spy)
 			go tx.Start()
 
-			Eventually(writer.method.Write.Method.In()).Should(HaveLen(1))
-			Consistently(writer.method.Write.Method.In()).Should(HaveLen(1))
+			Eventually(writer.batches).Should(HaveLen(1))
+			Consistently(writer.batches).Should(HaveLen(1))
 		})
 
 		It("emits egress and dropped metric", func() {
-			t := GinkgoT()
 			envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-			nexter := newMockNexter(t, time.Minute)
-			writer := newMockBatchWriter(t, time.Minute)
-			close(writer.method.Write.Method.Out())
+			nexter := NewSimpleNexter()
+			writer := NewSimpleBatchWriter()
 
 			for i := 0; i < 6; i++ {
-				nexter.method.TryNext.Method.Out() <- mockNexter_TryNext_Out{Ret0: envelope, Ret1: true}
+				nexter.AddEnvelope(envelope, true)
 			}
 
 			spy := metricsHelpers.NewMetricsRegistry()

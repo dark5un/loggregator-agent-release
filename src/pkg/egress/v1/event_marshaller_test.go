@@ -1,7 +1,7 @@
 package v1_test
 
 import (
-	"time"
+	"sync"
 
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
@@ -12,22 +12,40 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// SimpleBatchChainByteWriter is a simple implementation of the BatchChainByteWriter interface for testing
+type SimpleBatchChainByteWriter struct {
+	messages chan []byte
+	mu       sync.Mutex
+}
+
+func NewSimpleBatchChainByteWriter() *SimpleBatchChainByteWriter {
+	return &SimpleBatchChainByteWriter{
+		messages: make(chan []byte, 100),
+	}
+}
+
+func (w *SimpleBatchChainByteWriter) Write(message []byte) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.messages <- message
+	return nil
+}
+
 var _ = Describe("EventMarshaller", func() {
 	var (
-		marshaller      *egress.EventMarshaller
-		mockChainWriter *mockBatchChainByteWriter
-		metricClient    *metricsHelpers.SpyMetricsRegistry
+		marshaller   *egress.EventMarshaller
+		writer       *SimpleBatchChainByteWriter
+		metricClient *metricsHelpers.SpyMetricsRegistry
 	)
 
 	BeforeEach(func() {
-		t := GinkgoT()
-		mockChainWriter = newMockBatchChainByteWriter(t, time.Minute)
+		writer = NewSimpleBatchChainByteWriter()
 		metricClient = metricsHelpers.NewMetricsRegistry()
 	})
 
 	JustBeforeEach(func() {
 		marshaller = egress.NewMarshaller(metricClient)
-		marshaller.SetWriter(mockChainWriter)
+		marshaller.SetWriter(writer)
 	})
 
 	Describe("Write", func() {
@@ -55,18 +73,16 @@ var _ = Describe("EventMarshaller", func() {
 		Context("with an invalid envelope", func() {
 			BeforeEach(func() {
 				envelope = &events.Envelope{}
-				close(mockChainWriter.method.Write.Method.Out())
 			})
 
 			It("doesn't write the bytes", func() {
 				marshaller.Write(envelope)
-				Consistently(mockChainWriter.method.Write.Method.In()).ShouldNot(Receive())
+				Consistently(writer.messages).ShouldNot(Receive())
 			})
 		})
 
 		Context("with writer", func() {
 			BeforeEach(func() {
-				close(mockChainWriter.method.Write.Method.Out())
 				envelope = &events.Envelope{
 					Origin:    proto.String("The Negative Zone"),
 					EventType: events.Envelope_LogMessage.Enum(),
@@ -77,7 +93,9 @@ var _ = Describe("EventMarshaller", func() {
 				marshaller.Write(envelope)
 				expected, err := proto.Marshal(envelope)
 				Expect(err).ToNot(HaveOccurred())
-				Expect(mockChainWriter.method.Write.Method.In()).Should(Receive(Equal(expected)))
+				var received []byte
+				Eventually(writer.messages).Should(Receive(&received))
+				Expect(received).To(Equal(expected))
 
 				metric := metricClient.GetMetric("egress", map[string]string{"metric_version": "1.0"})
 				Expect(metric.Value()).To(Equal(float64(1)))
@@ -87,9 +105,7 @@ var _ = Describe("EventMarshaller", func() {
 
 	Describe("SetWriter", func() {
 		It("writes to the new writer", func() {
-			t := GinkgoT()
-			newWriter := newMockBatchChainByteWriter(t, time.Minute)
-			close(newWriter.method.Write.Method.Out())
+			newWriter := NewSimpleBatchChainByteWriter()
 			marshaller.SetWriter(newWriter)
 
 			envelope := &events.Envelope{
@@ -100,8 +116,10 @@ var _ = Describe("EventMarshaller", func() {
 
 			expected, err := proto.Marshal(envelope)
 			Expect(err).ToNot(HaveOccurred())
-			Consistently(mockChainWriter.method.Write.Method.In()).ShouldNot(Receive())
-			Eventually(newWriter.method.Write.Method.In()).Should(Receive(Equal(expected)))
+			Consistently(writer.messages).ShouldNot(Receive())
+			var received []byte
+			Eventually(newWriter.messages).Should(Receive(&received))
+			Expect(received).To(Equal(expected))
 		})
 	})
 })

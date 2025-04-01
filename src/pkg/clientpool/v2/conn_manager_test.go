@@ -76,7 +76,7 @@ var _ = Describe("ConnManager", func() {
 				closer: closer,
 				client: senderClient,
 			}
-			connManager = clientpool.NewConnManager(connector, 5, time.Minute)
+			connManager = clientpool.NewConnManager(connector, 5, time.Second*5)
 		})
 
 		It("sends the message down the connection", func() {

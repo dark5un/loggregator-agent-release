@@ -1,7 +1,7 @@
 package v1_test
 
 import (
-	"time"
+	"sync"
 
 	ingress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
@@ -11,19 +11,35 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// SimpleEnvelopeWriter is a simple implementation of EnvelopeWriter for testing
+type SimpleEnvelopeWriter struct {
+	envelopes chan *events.Envelope
+	mu        sync.Mutex
+}
+
+func NewSimpleEnvelopeWriter() *SimpleEnvelopeWriter {
+	return &SimpleEnvelopeWriter{
+		envelopes: make(chan *events.Envelope, 100),
+	}
+}
+
+func (w *SimpleEnvelopeWriter) Write(envelope *events.Envelope) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.envelopes <- envelope
+}
+
 var _ = Describe("EventUnmarshaller", func() {
 	var (
-		mockWriter   *mockEnvelopeWriter
+		writer       *SimpleEnvelopeWriter
 		unmarshaller *ingress.EventUnmarshaller
 		event        *events.Envelope
 		message      []byte
 	)
 
 	BeforeEach(func() {
-		t := GinkgoT()
-		mockWriter = newMockEnvelopeWriter(t, time.Minute)
-
-		unmarshaller = ingress.NewUnMarshaller(mockWriter)
+		writer = NewSimpleEnvelopeWriter()
+		unmarshaller = ingress.NewUnMarshaller(writer)
 		event = &events.Envelope{
 			Origin:      proto.String("fake-origin-3"),
 			EventType:   events.Envelope_ValueMetric.Enum(),
@@ -96,7 +112,7 @@ var _ = Describe("EventUnmarshaller", func() {
 			unmarshaller.Write(message)
 
 			var receivedEvent *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&receivedEvent))
+			Eventually(writer.envelopes).Should(Receive(&receivedEvent))
 			Expect(proto.Equal(receivedEvent, event)).To(BeTrue())
 		})
 
@@ -104,7 +120,7 @@ var _ = Describe("EventUnmarshaller", func() {
 			message = []byte("Bad Message")
 			unmarshaller.Write(message)
 
-			Consistently(mockWriter.method.Write.Method.In()).ShouldNot(Receive())
+			Consistently(writer.envelopes).ShouldNot(Receive())
 		})
 	})
 })

@@ -1,8 +1,6 @@
 package v1_test
 
 import (
-	"time"
-
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
@@ -13,19 +11,18 @@ import (
 
 var _ = Describe("EventWriter", func() {
 	var (
-		mockWriter  *mockEnvelopeWriter
+		writer      *SimpleEnvelopeWriter
 		eventWriter *egress.EventWriter
 	)
 
 	BeforeEach(func() {
-		t := GinkgoT()
-		mockWriter = newMockEnvelopeWriter(t, time.Minute)
+		writer = NewSimpleEnvelopeWriter()
 		eventWriter = egress.New("Africa")
 	})
 
 	Describe("Emit", func() {
 		It("writes emitted events", func() {
-			eventWriter.SetWriter(mockWriter)
+			eventWriter.SetWriter(writer)
 
 			event := &events.ValueMetric{
 				Name:  proto.String("ValueName"),
@@ -35,11 +32,11 @@ var _ = Describe("EventWriter", func() {
 			err := eventWriter.Emit(event)
 			Expect(err).To(BeNil())
 
-			var input mockEnvelopeWriter_Write_In
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&input))
-			Expect(input.Event.GetOrigin()).To(Equal("Africa"))
-			Expect(input.Event.GetEventType()).To(Equal(events.Envelope_ValueMetric))
-			Expect(input.Event.GetValueMetric()).To(Equal(event))
+			var receivedEnvelope *events.Envelope
+			Eventually(writer.envelopes).Should(Receive(&receivedEnvelope))
+			Expect(receivedEnvelope.GetOrigin()).To(Equal("Africa"))
+			Expect(receivedEnvelope.GetEventType()).To(Equal(events.Envelope_ValueMetric))
+			Expect(receivedEnvelope.GetValueMetric()).To(Equal(event))
 		})
 
 		It("returns an error with a sane message when emitting without a writer", func() {
@@ -56,7 +53,7 @@ var _ = Describe("EventWriter", func() {
 
 	Describe("EmitEnvelope", func() {
 		It("writes emitted events", func() {
-			eventWriter.SetWriter(mockWriter)
+			eventWriter.SetWriter(writer)
 
 			event := &events.Envelope{
 				Origin:    proto.String("foo"),
@@ -70,9 +67,9 @@ var _ = Describe("EventWriter", func() {
 			err := eventWriter.EmitEnvelope(event)
 			Expect(err).To(BeNil())
 
-			var input mockEnvelopeWriter_Write_In
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&input))
-			Expect(input.Event).To(Equal(event))
+			var receivedEnvelope *events.Envelope
+			Eventually(writer.envelopes).Should(Receive(&receivedEnvelope))
+			Expect(receivedEnvelope).To(Equal(event))
 		})
 
 		It("returns an error with a sane message when emitting without a writer", func() {

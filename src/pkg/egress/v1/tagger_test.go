@@ -1,8 +1,6 @@
 package v1_test
 
 import (
-	"time"
-
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
@@ -11,16 +9,18 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// SimpleEnvelopeWriter is defined in message_aggregator_test.go
+// No need to redeclare it here
+
 var _ = Describe("Tagger", func() {
 	It("tags events with the given deployment name, job, index and IP address", func() {
-		t := GinkgoT()
-		mockWriter := newMockEnvelopeWriter(t, time.Minute)
+		writer := NewSimpleEnvelopeWriter()
 		tagger := egress.NewTagger(
 			"test-deployment",
 			"test-job",
 			"2",
 			"123.123.123.123",
-			mockWriter,
+			writer,
 		)
 		envelope := &events.Envelope{
 			EventType: events.Envelope_ValueMetric.Enum(),
@@ -34,7 +34,7 @@ var _ = Describe("Tagger", func() {
 		tagger.Write(envelope)
 
 		var receivedEvent *events.Envelope
-		Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&receivedEvent))
+		Eventually(writer.envelopes).Should(Receive(&receivedEvent))
 		expected := &events.Envelope{
 			EventType: events.Envelope_ValueMetric.Enum(),
 			ValueMetric: &events.ValueMetric{
@@ -52,20 +52,20 @@ var _ = Describe("Tagger", func() {
 
 	Context("doesn't overwrite", func() {
 		var (
-			mockWriter *mockEnvelopeWriter
-			tagger     *egress.Tagger
-			envelope   *events.Envelope
+			writer   *SimpleEnvelopeWriter
+			tagger   *egress.Tagger
+			envelope *events.Envelope
 		)
 
 		BeforeEach(func() {
-			t := GinkgoT()
-			mockWriter = newMockEnvelopeWriter(t, time.Minute)
+			writer = NewSimpleEnvelopeWriter()
+
 			tagger = egress.NewTagger(
 				"test-deployment",
 				"test-job",
 				"2",
 				"123.123.123.123",
-				mockWriter,
+				writer,
 			)
 
 			envelope = &events.Envelope{
@@ -83,7 +83,7 @@ var _ = Describe("Tagger", func() {
 			tagger.Write(envelope)
 
 			var writtenEnvelope *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
+			Eventually(writer.envelopes).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Deployment).Should(Equal("another-deployment"))
 		})
 
@@ -92,7 +92,7 @@ var _ = Describe("Tagger", func() {
 			tagger.Write(envelope)
 
 			var writtenEnvelope *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
+			Eventually(writer.envelopes).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Job).Should(Equal("another-job"))
 		})
 
@@ -101,7 +101,7 @@ var _ = Describe("Tagger", func() {
 			tagger.Write(envelope)
 
 			var writtenEnvelope *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
+			Eventually(writer.envelopes).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Index).Should(Equal("3"))
 		})
 
@@ -110,7 +110,7 @@ var _ = Describe("Tagger", func() {
 			tagger.Write(envelope)
 
 			var writtenEnvelope *events.Envelope
-			Eventually(mockWriter.method.Write.Method.In()).Should(Receive(&writtenEnvelope))
+			Eventually(writer.envelopes).Should(Receive(&writtenEnvelope))
 			Eventually(*writtenEnvelope.Ip).Should(Equal("1.1.1.1"))
 		})
 	})

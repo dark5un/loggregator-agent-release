@@ -21,7 +21,7 @@ var _ = Describe("ConnManager", func() {
 
 	BeforeEach(func() {
 		mockConnector = newMockConnector()
-		connManager = clientpool.NewConnManager(mockConnector, 5, time.Minute)
+		connManager = clientpool.NewConnManager(mockConnector, 5, time.Second*5)
 		mockCloser = newMockCloser()
 		mockPusherClient = newMockDopplerIngestor_PusherClient()
 	})
