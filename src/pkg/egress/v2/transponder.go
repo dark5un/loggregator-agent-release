@@ -1,3 +1,7 @@
+//go:generate mockgen -package v2_test -destination mock_nexter_test.go -source transponder.go Nexter
+//go:generate mockgen -package v2_test -destination mock_batch_writer_test.go -source transponder.go BatchWriter
+//go:generate mockgen -package v2_test -destination mock_metric_client_test.go -source transponder.go MetricClient
+
 package v2
 
 import (
@@ -24,6 +28,7 @@ type Transponder struct {
 	batchInterval time.Duration
 	droppedMetric metrics.Counter
 	egressMetric  metrics.Counter
+	Done          chan struct{}
 }
 
 type MetricClient interface {
@@ -54,6 +59,7 @@ func NewTransponder(
 		egressMetric:  egressMetric,
 		batchSize:     batchSize,
 		batchInterval: batchInterval,
+		Done:          make(chan struct{}),
 	}
 }
 
@@ -65,15 +71,29 @@ func (t *Transponder) Start() {
 	)
 
 	for {
-		envelope, ok := t.nexter.TryNext()
-		if !ok {
+		select {
+		case <-t.Done:
 			b.Flush()
-			time.Sleep(100 * time.Millisecond)
-			continue
-		}
+			return
+		default:
+			envelope, ok := t.nexter.TryNext()
+			if !ok {
+				b.Flush()
+				select {
+				case <-t.Done:
+					return
+				case <-time.After(100 * time.Millisecond):
+					continue
+				}
+			}
 
-		b.Write(envelope)
+			b.Write(envelope)
+		}
 	}
+}
+
+func (t *Transponder) Stop() {
+	close(t.Done)
 }
 
 func (t *Transponder) write(batch []*loggregator_v2.Envelope) {

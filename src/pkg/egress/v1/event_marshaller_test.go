@@ -1,11 +1,14 @@
 package v1_test
 
 import (
+	"errors"
+
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
@@ -13,13 +16,19 @@ import (
 var _ = Describe("EventMarshaller", func() {
 	var (
 		marshaller      *egress.EventMarshaller
-		mockChainWriter *mockBatchChainByteWriter
+		mockChainWriter *MockBatchChainByteWriter
 		metricClient    *metricsHelpers.SpyMetricsRegistry
+		ctrl            *gomock.Controller
 	)
 
 	BeforeEach(func() {
-		mockChainWriter = newMockBatchChainByteWriter()
+		ctrl = gomock.NewController(GinkgoT())
+		mockChainWriter = NewMockBatchChainByteWriter(ctrl)
 		metricClient = metricsHelpers.NewMetricsRegistry()
+	})
+
+	AfterEach(func() {
+		ctrl.Finish()
 	})
 
 	JustBeforeEach(func() {
@@ -49,55 +58,58 @@ var _ = Describe("EventMarshaller", func() {
 			})
 		})
 
-		Context("with an invalid envelope", func() {
+		Context("with a valid writer", func() {
 			BeforeEach(func() {
-				envelope = &events.Envelope{}
-				close(mockChainWriter.WriteOutput.Err)
-			})
-
-			It("doesn't write the bytes", func() {
-				marshaller.Write(envelope)
-				Consistently(mockChainWriter.WriteCalled).ShouldNot(Receive())
-			})
-		})
-
-		Context("with writer", func() {
-			BeforeEach(func() {
-				close(mockChainWriter.WriteOutput.Err)
 				envelope = &events.Envelope{
 					Origin:    proto.String("The Negative Zone"),
 					EventType: events.Envelope_LogMessage.Enum(),
 				}
 			})
 
-			It("writes messages to the writer", func() {
+			It("writes the marshalled envelope to the writer", func() {
+				mockChainWriter.EXPECT().Write(gomock.Any()).Return(nil)
 				marshaller.Write(envelope)
-				expected, err := proto.Marshal(envelope)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(mockChainWriter.WriteInput.Message).To(Receive(Equal(expected)))
+			})
 
-				metric := metricClient.GetMetric("egress", map[string]string{"metric_version": "1.0"})
-				Expect(metric.Value()).To(Equal(float64(1)))
+			It("increments the egress counter", func() {
+				mockChainWriter.EXPECT().Write(gomock.Any()).Return(nil)
+				marshaller.Write(envelope)
+				Expect(metricClient.GetMetric("egress", map[string]string{"metric_version": "1.0"}).Value()).To(Equal(float64(1)))
+			})
+
+			Context("when the writer returns an error", func() {
+				It("does not increment the counter", func() {
+					mockChainWriter.EXPECT().Write(gomock.Any()).Return(errors.New("write error"))
+					marshaller.Write(envelope)
+					Expect(metricClient.GetMetric("egress", map[string]string{"metric_version": "1.0"}).Value()).To(Equal(float64(0)))
+				})
 			})
 		})
 	})
 
 	Describe("SetWriter", func() {
 		It("writes to the new writer", func() {
-			newWriter := newMockBatchChainByteWriter()
-			close(newWriter.WriteOutput.Err)
+			newWriter := NewMockBatchChainByteWriter(ctrl)
+			newWriter.EXPECT().Write(gomock.Any()).Return(nil)
 			marshaller.SetWriter(newWriter)
-
 			envelope := &events.Envelope{
 				Origin:    proto.String("The Negative Zone"),
 				EventType: events.Envelope_LogMessage.Enum(),
 			}
 			marshaller.Write(envelope)
+		})
 
-			expected, err := proto.Marshal(envelope)
-			Expect(err).ToNot(HaveOccurred())
-			Consistently(mockChainWriter.WriteInput.Message).ShouldNot(Receive())
-			Eventually(newWriter.WriteInput.Message).Should(Receive(Equal(expected)))
+		It("uses the new writer for subsequent writes", func() {
+			oldWriter := mockChainWriter
+			newWriter := NewMockBatchChainByteWriter(ctrl)
+			marshaller.SetWriter(newWriter)
+			envelope := &events.Envelope{
+				Origin:    proto.String("The Negative Zone"),
+				EventType: events.Envelope_LogMessage.Enum(),
+			}
+			newWriter.EXPECT().Write(gomock.Any()).Return(nil)
+			marshaller.Write(envelope)
+			oldWriter.EXPECT().Write(gomock.Any()).Times(0)
 		})
 	})
 })

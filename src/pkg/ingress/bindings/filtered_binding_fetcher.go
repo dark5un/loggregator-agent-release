@@ -1,6 +1,9 @@
+//go:generate mockgen -package bindings_test -destination mock_ip_checker_test.go -source filtered_binding_fetcher.go
+
 package bindings
 
 import (
+	"fmt"
 	"log"
 	"net"
 	"net/url"
@@ -11,8 +14,6 @@ import (
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/simplecache"
 )
-
-//go:generate hel --type IPChecker
 
 var allowedSchemes = []string{"syslog", "syslog-tls", "https", "https-batch"}
 
@@ -141,4 +142,19 @@ func invalidScheme(scheme string) bool {
 	}
 
 	return true
+}
+
+func (f *FilteredBindingFetcher) CheckBindings(bindings []string) error {
+	for _, binding := range bindings {
+		ip, err := f.ipChecker.ResolveAddr(binding)
+		if err != nil {
+			return fmt.Errorf("failed to resolve address %s: %s", binding, err)
+		}
+
+		err = f.ipChecker.CheckBlacklist(ip)
+		if err != nil {
+			return fmt.Errorf("failed to check blacklist for %s: %s", binding, err)
+		}
+	}
+	return nil
 }

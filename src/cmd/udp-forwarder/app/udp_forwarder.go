@@ -94,11 +94,11 @@ func (u *UDPForwarder) Run() {
 		v2Writer{v2Ingress},
 	)
 
-	dropsondeUnmarshaller := ingress.NewUnMarshaller(w)
+	unmarshaller := ingress.New(w)
 	u.mu.Lock()
 	u.nr, err = ingress.NewNetworkReader(
 		fmt.Sprintf("127.0.0.1:%d", u.udpPort),
-		dropsondeUnmarshaller,
+		unmarshaller,
 		u.metrics,
 	)
 	u.mu.Unlock()

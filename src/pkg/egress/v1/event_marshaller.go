@@ -1,3 +1,6 @@
+//go:generate mockgen -package v1_test -destination mock_metric_client_test.go -source event_marshaller.go MetricClient
+//go:generate mockgen -package v1_test -destination mock_batch_chain_byte_writer_test.go -source event_marshaller.go BatchChainByteWriter
+
 package v1
 
 import (

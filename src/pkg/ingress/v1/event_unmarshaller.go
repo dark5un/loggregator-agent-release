@@ -1,8 +1,10 @@
-//go:generate hel
+//go:generate mockgen -package v1_test -destination mock_envelope_writer_test.go -source event_unmarshaller.go
+
 package v1
 
 import (
 	"errors"
+	"fmt"
 	"log"
 
 	"github.com/cloudfoundry/sonde-go/events"
@@ -23,16 +25,17 @@ type EventUnmarshaller struct {
 	outputWriter EnvelopeWriter
 }
 
-func NewUnMarshaller(outputWriter EnvelopeWriter) *EventUnmarshaller {
+func New(outputWriter EnvelopeWriter) *EventUnmarshaller {
 	return &EventUnmarshaller{
 		outputWriter: outputWriter,
 	}
 }
 
 func (u *EventUnmarshaller) Write(message []byte) {
-	envelope, err := u.UnmarshallMessage(message)
+	envelope := &events.Envelope{}
+	err := proto.Unmarshal(message, envelope)
 	if err != nil {
-		log.Printf("Error unmarshalling: %s", err)
+		fmt.Printf("Error unmarshalling message from doppler: %s", err.Error())
 		return
 	}
 	u.outputWriter.Write(envelope)

@@ -1,3 +1,6 @@
+//go:generate mockgen -package v2_test -destination mock_writer_test.go -source envelope_writer.go Writer
+//go:generate mockgen -package v2_test -destination mock_envelope_processor_test.go -source envelope_writer.go EnvelopeProcessor
+
 package v2
 
 import "code.cloudfoundry.org/go-loggregator/v10/rpc/loggregator_v2"

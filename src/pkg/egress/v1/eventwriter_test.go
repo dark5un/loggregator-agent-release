@@ -5,19 +5,26 @@ import (
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
 
 var _ = Describe("EventWriter", func() {
 	var (
-		mockWriter  *mockEnvelopeWriter
+		mockWriter  *MockEnvelopeWriter
 		eventWriter *egress.EventWriter
+		ctrl        *gomock.Controller
 	)
 
 	BeforeEach(func() {
-		mockWriter = newMockEnvelopeWriter()
+		ctrl = gomock.NewController(GinkgoT())
+		mockWriter = NewMockEnvelopeWriter(ctrl)
 		eventWriter = egress.New("Africa")
+	})
+
+	AfterEach(func() {
+		ctrl.Finish()
 	})
 
 	Describe("Emit", func() {
@@ -29,14 +36,15 @@ var _ = Describe("EventWriter", func() {
 				Value: proto.Float64(13),
 				Unit:  proto.String("giraffes"),
 			}
+
+			mockWriter.EXPECT().Write(gomock.Any()).DoAndReturn(func(e *events.Envelope) {
+				Expect(e.GetOrigin()).To(Equal("Africa"))
+				Expect(e.GetEventType()).To(Equal(events.Envelope_ValueMetric))
+				Expect(e.GetValueMetric()).To(Equal(event))
+			})
+
 			err := eventWriter.Emit(event)
 			Expect(err).To(BeNil())
-
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			e := <-mockWriter.WriteInput.Event
-			Expect(e.GetOrigin()).To(Equal("Africa"))
-			Expect(e.GetEventType()).To(Equal(events.Envelope_ValueMetric))
-			Expect(e.GetValueMetric()).To(Equal(event))
 		})
 
 		It("returns an error with a sane message when emitting without a writer", func() {
@@ -64,11 +72,11 @@ var _ = Describe("EventWriter", func() {
 					Unit:  proto.String("giraffes"),
 				},
 			}
+
+			mockWriter.EXPECT().Write(event)
+
 			err := eventWriter.EmitEnvelope(event)
 			Expect(err).To(BeNil())
-
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			Expect(<-mockWriter.WriteInput.Event).To(Equal(event))
 		})
 
 		It("returns an error with a sane message when emitting without a writer", func() {

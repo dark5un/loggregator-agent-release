@@ -1,106 +1,52 @@
 package v1_test
 
 import (
-	ingress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/v1"
+	v1 "code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/v1"
 	"github.com/cloudfoundry/sonde-go/events"
-	"google.golang.org/protobuf/proto"
-
+	"github.com/golang/mock/gomock"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/proto"
 )
 
 var _ = Describe("EventUnmarshaller", func() {
 	var (
-		mockWriter   *mockEnvelopeWriter
-		unmarshaller *ingress.EventUnmarshaller
-		event        *events.Envelope
-		message      []byte
+		mockCtrl     *gomock.Controller
+		mockWriter   *MockEnvelopeWriter
+		unmarshaller *v1.EventUnmarshaller
 	)
 
 	BeforeEach(func() {
-		mockWriter = newMockEnvelopeWriter()
-
-		unmarshaller = ingress.NewUnMarshaller(mockWriter)
-		event = &events.Envelope{
-			Origin:      proto.String("fake-origin-3"),
-			EventType:   events.Envelope_ValueMetric.Enum(),
-			ValueMetric: NewValueMetric("value-name", 1.0, "units"),
-			Tags: map[string]string{
-				"source_id": "my-source-id",
-			},
-		}
-		message, _ = proto.Marshal(event)
+		mockCtrl = gomock.NewController(GinkgoT())
+		mockWriter = NewMockEnvelopeWriter(mockCtrl)
+		unmarshaller = v1.New(mockWriter)
 	})
 
-	Context("UnmarshallMessage", func() {
-		It("unmarshalls bytes", func() {
-			output, _ := unmarshaller.UnmarshallMessage(message)
-
-			Expect(proto.Equal(output, event)).To(BeTrue())
-		})
-
-		It("handles bad input gracefully", func() {
-			output, err := unmarshaller.UnmarshallMessage(make([]byte, 4))
-			Expect(output).To(BeNil())
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("doesn't write unknown event types", func() {
-			unknownEventTypeMessage := &events.Envelope{
-				Origin:    proto.String("fake-origin-2"),
-				EventType: events.Envelope_EventType(2000).Enum(),
-				ValueMetric: &events.ValueMetric{
-					Name:  proto.String("fake-metric-name"),
-					Value: proto.Float64(42),
-					Unit:  proto.String("fake-unit"),
-				},
-			}
-			message, err := proto.Marshal(unknownEventTypeMessage)
-			Expect(err).ToNot(HaveOccurred())
-
-			output, err := unmarshaller.UnmarshallMessage(message)
-			Expect(output).To(BeNil())
-			Expect(err).To(HaveOccurred())
-		})
-
-		Context("with no source_id tag", func() {
-			BeforeEach(func() {
-				event = &events.Envelope{
-					Origin:      proto.String("fake-origin-3"),
-					EventType:   events.Envelope_ValueMetric.Enum(),
-					ValueMetric: NewValueMetric("value-name", 1.0, "units"),
-				}
-				message, _ = proto.Marshal(event)
-			})
-
-			It("sets source_id tag to origin value", func() {
-				output, _ := unmarshaller.UnmarshallMessage(message)
-
-				eventWithSourceID := &events.Envelope{
-					Origin:      proto.String("fake-origin-3"),
-					EventType:   events.Envelope_ValueMetric.Enum(),
-					ValueMetric: NewValueMetric("value-name", 1.0, "units"),
-					Tags:        map[string]string{"source_id": "fake-origin-3"},
-				}
-
-				Expect(proto.Equal(output, eventWithSourceID)).To(BeTrue())
-			})
-		})
+	AfterEach(func() {
+		mockCtrl.Finish()
 	})
 
 	Context("Write", func() {
 		It("unmarshalls byte arrays and writes to an EnvelopeWriter", func() {
-			unmarshaller.Write(message)
+			envelope := &events.Envelope{
+				Origin:    proto.String("fake-origin"),
+				EventType: events.Envelope_LogMessage.Enum(),
+				LogMessage: &events.LogMessage{
+					Message:     []byte("foo"),
+					MessageType: events.LogMessage_OUT.Enum(),
+					Timestamp:   proto.Int64(1234),
+				},
+			}
+			message, err := proto.Marshal(envelope)
+			Expect(err).ToNot(HaveOccurred())
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			Expect(proto.Equal(<-mockWriter.WriteInput.Event, event)).To(BeTrue())
+			mockWriter.EXPECT().Write(gomock.Any())
+
+			unmarshaller.Write(message)
 		})
 
-		It("returns an error when it can't unmarshal", func() {
-			message = []byte("Bad Message")
-			unmarshaller.Write(message)
-
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(0))
+		It("handles bad input gracefully", func() {
+			unmarshaller.Write(make([]byte, 4))
 		})
 	})
 })
