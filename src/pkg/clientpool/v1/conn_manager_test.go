@@ -20,10 +20,10 @@ var _ = Describe("ConnManager", func() {
 	)
 
 	BeforeEach(func() {
-		mockConnector = newMockConnector()
+		mockConnector = NewConnectorMock()
 		connManager = clientpool.NewConnManager(mockConnector, 5, time.Minute)
-		mockCloser = newMockCloser()
-		mockPusherClient = newMockDopplerIngestor_PusherClient()
+		mockCloser = NewCloserMock()
+		mockPusherClient = NewDopplerIngestorMock_PusherClient()
 	})
 
 	Context("when a connection is able to be established", func() {

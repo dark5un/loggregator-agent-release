@@ -26,7 +26,7 @@ var _ = Describe("HTTPWriter", func() {
 	)
 
 	It("errors when ssl validation is enabled", func() {
-		drain := newMockOKDrain()
+		drain := NewOKDrainMock()
 
 		b := buildURLBinding(drain.URL, "test-app-id", "test-hostname")
 
@@ -43,7 +43,7 @@ var _ = Describe("HTTPWriter", func() {
 	})
 
 	It("errors when the http POST fails", func() {
-		drain := newMockErrorDrain()
+		drain := NewErrorDrainMock()
 
 		b := buildURLBinding(
 			drain.URL,
@@ -86,7 +86,7 @@ var _ = Describe("HTTPWriter", func() {
 	})
 
 	It("sets Content-Type to text/plain", func() {
-		drain := newMockOKDrain()
+		drain := NewOKDrainMock()
 
 		b := buildURLBinding(
 			drain.URL,
@@ -111,7 +111,7 @@ var _ = Describe("HTTPWriter", func() {
 	})
 
 	It("writes gauge metrics to the http drain", func() {
-		drain := newMockOKDrain()
+		drain := NewOKDrainMock()
 
 		b := buildURLBinding(
 			drain.URL,
@@ -160,7 +160,7 @@ var _ = Describe("HTTPWriter", func() {
 	})
 
 	It("writes counter metrics to the http drain", func() {
-		drain := newMockOKDrain()
+		drain := NewOKDrainMock()
 
 		b := buildURLBinding(
 			drain.URL,
@@ -195,7 +195,7 @@ var _ = Describe("HTTPWriter", func() {
 	})
 
 	It("emits an egress metric for each message", func() {
-		drain := newMockOKDrain()
+		drain := NewOKDrainMock()
 
 		b := buildURLBinding(
 			drain.URL,
@@ -220,7 +220,7 @@ var _ = Describe("HTTPWriter", func() {
 	})
 
 	It("ignores non-log envelopes", func() {
-		drain := newMockOKDrain()
+		drain := NewOKDrainMock()
 
 		b := buildURLBinding(
 			drain.URL,
@@ -279,13 +279,13 @@ func (d *SpyDrain) getMessagesSize() int {
 func (d *SpyDrain) getRequestCount() int {
 	return d.requestCount
 }
-func newMockOKDrain() *SpyDrain {
-	return newMockDrain(http.StatusOK)
+func NewOKDrainMock() *SpyDrain {
+	return NewDrainMock(http.StatusOK)
 }
-func newMockErrorDrain() *SpyDrain {
-	return newMockDrain(http.StatusBadRequest)
+func NewErrorDrainMock() *SpyDrain {
+	return NewDrainMock(http.StatusBadRequest)
 }
-func newMockDrain(status int) *SpyDrain {
+func NewDrainMock(status int) *SpyDrain {
 	drain := &SpyDrain{}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		message := &rfc5424.Message{}

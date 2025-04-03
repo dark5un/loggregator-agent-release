@@ -14,6 +14,24 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// MockIPChecker is a custom mock implementation of the IPChecker interface
+type MockIPChecker struct {
+	ResolveAddrFunc     func(host string) (net.IP, error)
+	CheckBlacklistFunc  func(ip net.IP) error
+	ResolveAddrCalls    int
+	CheckBlacklistCalls int
+}
+
+func (m *MockIPChecker) ResolveAddr(host string) (net.IP, error) {
+	m.ResolveAddrCalls++
+	return m.ResolveAddrFunc(host)
+}
+
+func (m *MockIPChecker) CheckBlacklist(ip net.IP) error {
+	m.CheckBlacklistCalls++
+	return m.CheckBlacklistFunc(ip)
+}
+
 var _ = Describe("FilteredBindingFetcher", func() {
 	var (
 		log     = log.New(GinkgoWriter, "", log.LstdFlags)
@@ -195,15 +213,17 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	Context("when the drain host fails to resolve", func() {
 		var logBuffer bytes.Buffer
 		var warn bool
-		var mockic *mockIPChecker
+		var mockic *MockIPChecker
 
 		BeforeEach(func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
-			mockic = newMockIPChecker()
-			mockic.ResolveAddrOutput.Ret0 <- net.IP{}
-			mockic.ResolveAddrOutput.Ret1 <- errors.New("oof ouch ip not resolved")
+			mockic = &MockIPChecker{
+				ResolveAddrFunc: func(host string) (net.IP, error) {
+					return net.IP{}, errors.New("oof ouch ip not resolved")
+				},
+			}
 		})
 
 		JustBeforeEach(func() {
@@ -226,21 +246,24 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			Expect(actual).To(Equal([]syslog.Binding{}))
 			Expect(logBuffer.String()).Should(MatchRegexp("Cannot resolve ip address for syslog drain with url"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
+			Expect(mockic.ResolveAddrCalls).To(Equal(1))
 		})
 
 		It("caches bindings that failed to resolve", func() {
 			actual, err := filter.FetchBindings()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Eventually(mockic.ResolveAddrCalled).Should(Receive())
+			Expect(mockic.ResolveAddrCalls).To(Equal(1))
 			Expect(logBuffer.String()).Should(MatchRegexp("Cannot resolve ip address for syslog drain with url"))
 			Expect(logBuffer.String()).ToNot(MatchRegexp("Skipped resolve ip address for syslog drain with url"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
 
+			// For cached resolve calls, it should not call the mock again
 			actual, err = filter.FetchBindings()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(BeEmpty())
-			Consistently(mockic.ResolveAddrCalled).ShouldNot(Receive())
+			// Assert the ResolveAddr was called exactly once (not twice)
+			Expect(mockic.ResolveAddrCalls).To(Equal(1))
 			Expect(logBuffer.String()).Should(MatchRegexp("Skipped resolve ip address for syslog drain with url"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
 		})

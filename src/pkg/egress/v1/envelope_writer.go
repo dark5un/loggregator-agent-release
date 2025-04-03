@@ -1,4 +1,4 @@
-//go:generate hel
+//go:generate mockery --name EnvelopeWriter
 package v1
 
 import "github.com/cloudfoundry/sonde-go/events"

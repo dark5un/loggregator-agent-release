@@ -11,7 +11,7 @@ import (
 
 var _ = Describe("EnvelopeWriter", func() {
 	It("processes envelopes before writing", func() {
-		mockSingleWriter := newMockSingleWriter()
+		mockSingleWriter := NewSingleWriterMock()
 		close(mockSingleWriter.WriteOutput.Ret0)
 
 		tagger := v2.NewTagger(nil)
@@ -24,7 +24,7 @@ var _ = Describe("EnvelopeWriter", func() {
 	})
 
 	It("returns an error if the processor fails", func() {
-		mockSingleWriter := newMockSingleWriter()
+		mockSingleWriter := NewSingleWriterMock()
 		close(mockSingleWriter.WriteOutput.Ret0)
 
 		ew := v2.NewEnvelopeWriter(mockSingleWriter, &mockProcessor{processErr: errors.New("expected error")})
@@ -42,7 +42,7 @@ type mockSingleWriter struct {
 	}
 }
 
-func newMockSingleWriter() *mockSingleWriter {
+func NewSingleWriterMock() *mockSingleWriter {
 	m := &mockSingleWriter{}
 	m.WriteCalled = make(chan bool, 100)
 	m.WriteInput.Msg = make(chan *loggregator_v2.Envelope, 100)

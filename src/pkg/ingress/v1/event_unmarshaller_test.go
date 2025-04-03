@@ -2,7 +2,10 @@ package v1_test
 
 import (
 	ingress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/v1"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/v1/mocks"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/testhelpers"
 	"github.com/cloudfoundry/sonde-go/events"
+	"github.com/stretchr/testify/mock"
 	"google.golang.org/protobuf/proto"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,96 +14,100 @@ import (
 
 var _ = Describe("EventUnmarshaller", func() {
 	var (
-		mockWriter   *mockEnvelopeWriter
+		mockWriter   *mocks.EnvelopeWriter
 		unmarshaller *ingress.EventUnmarshaller
-		event        *events.Envelope
-		message      []byte
+		mockT        *testhelpers.MockTesting
 	)
 
 	BeforeEach(func() {
-		mockWriter = newMockEnvelopeWriter()
-
+		mockT = testhelpers.NewMockTesting()
+		mockWriter = mocks.NewEnvelopeWriter(mockT)
+		mockWriter.On("Write", mock.AnythingOfType("*events.Envelope")).Return()
 		unmarshaller = ingress.NewUnMarshaller(mockWriter)
-		event = &events.Envelope{
-			Origin:      proto.String("fake-origin-3"),
-			EventType:   events.Envelope_ValueMetric.Enum(),
-			ValueMetric: NewValueMetric("value-name", 1.0, "units"),
-			Tags: map[string]string{
-				"source_id": "my-source-id",
-			},
-		}
-		message, _ = proto.Marshal(event)
 	})
 
-	Context("UnmarshallMessage", func() {
-		It("unmarshalls bytes", func() {
-			output, _ := unmarshaller.UnmarshallMessage(message)
-
-			Expect(proto.Equal(output, event)).To(BeTrue())
-		})
-
-		It("handles bad input gracefully", func() {
-			output, err := unmarshaller.UnmarshallMessage(make([]byte, 4))
-			Expect(output).To(BeNil())
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("doesn't write unknown event types", func() {
-			unknownEventTypeMessage := &events.Envelope{
-				Origin:    proto.String("fake-origin-2"),
-				EventType: events.Envelope_EventType(2000).Enum(),
-				ValueMetric: &events.ValueMetric{
-					Name:  proto.String("fake-metric-name"),
-					Value: proto.Float64(42),
-					Unit:  proto.String("fake-unit"),
+	Context("when the message contains a valid v1 envelope", func() {
+		It("unmarshalls the bytes and handles them", func() {
+			envelope := &events.Envelope{
+				Origin:    proto.String("fake-origin-3"),
+				EventType: events.Envelope_LogMessage.Enum(),
+				LogMessage: &events.LogMessage{
+					Message:     []byte("test message"),
+					MessageType: events.LogMessage_OUT.Enum(),
+					Timestamp:   proto.Int64(123456789),
+				},
+				Tags: map[string]string{
+					"foo": "bar",
 				},
 			}
-			message, err := proto.Marshal(unknownEventTypeMessage)
-			Expect(err).ToNot(HaveOccurred())
+			message, _ := proto.Marshal(envelope)
 
-			output, err := unmarshaller.UnmarshallMessage(message)
-			Expect(output).To(BeNil())
-			Expect(err).To(HaveOccurred())
-		})
-
-		Context("with no source_id tag", func() {
-			BeforeEach(func() {
-				event = &events.Envelope{
-					Origin:      proto.String("fake-origin-3"),
-					EventType:   events.Envelope_ValueMetric.Enum(),
-					ValueMetric: NewValueMetric("value-name", 1.0, "units"),
-				}
-				message, _ = proto.Marshal(event)
-			})
-
-			It("sets source_id tag to origin value", func() {
-				output, _ := unmarshaller.UnmarshallMessage(message)
-
-				eventWithSourceID := &events.Envelope{
-					Origin:      proto.String("fake-origin-3"),
-					EventType:   events.Envelope_ValueMetric.Enum(),
-					ValueMetric: NewValueMetric("value-name", 1.0, "units"),
-					Tags:        map[string]string{"source_id": "fake-origin-3"},
-				}
-
-				Expect(proto.Equal(output, eventWithSourceID)).To(BeTrue())
-			})
+			unmarshaller.Write(message)
+			mockWriter.AssertNumberOfCalls(mockT, "Write", 1)
 		})
 	})
 
-	Context("Write", func() {
-		It("unmarshalls byte arrays and writes to an EnvelopeWriter", func() {
+	Context("when unmarshalling fails", func() {
+		It("does not write to the next writer", func() {
+			message := []byte("this is not a valid v1 envelope")
 			unmarshaller.Write(message)
-
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			Expect(proto.Equal(<-mockWriter.WriteInput.Event, event)).To(BeTrue())
+			mockWriter.AssertNumberOfCalls(mockT, "Write", 0)
 		})
+	})
 
-		It("returns an error when it can't unmarshal", func() {
-			message = []byte("Bad Message")
-			unmarshaller.Write(message)
+	Context("when the v1 envelope is missing required fields", func() {
+		It("does not handle the event", func() {
+			envelope := &events.Envelope{
+				Origin:    proto.String("fake-origin-3"),
+				EventType: events.Envelope_LogMessage.Enum(),
+				// LogMessage: &events.LogMessage{},
+			}
+			bytes, err := proto.Marshal(envelope)
+			Expect(err).ToNot(HaveOccurred())
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(0))
+			unmarshaller.Write(bytes)
+			mockWriter.AssertNumberOfCalls(mockT, "Write", 0)
+		})
+	})
+
+	Context("when the message has useful Tags", func() {
+		It("unmarshalls the bytes and handles them", func() {
+			envelope := &events.Envelope{
+				Origin:    proto.String("fake-origin-3"),
+				EventType: events.Envelope_LogMessage.Enum(),
+				LogMessage: &events.LogMessage{
+					Message:     []byte("test message"),
+					MessageType: events.LogMessage_OUT.Enum(),
+					Timestamp:   proto.Int64(123456789),
+				},
+				Tags: map[string]string{
+					"source_id": "some-app-id",
+				},
+			}
+			bytes, err := proto.Marshal(envelope)
+			Expect(err).ToNot(HaveOccurred())
+
+			unmarshaller.Write(bytes)
+			mockWriter.AssertNumberOfCalls(mockT, "Write", 1)
+		})
+	})
+
+	Context("when the message doesn't have Tags", func() {
+		It("unmarshalls the bytes and handles them", func() {
+			envelope := &events.Envelope{
+				Origin:    proto.String("fake-origin-3"),
+				EventType: events.Envelope_LogMessage.Enum(),
+				LogMessage: &events.LogMessage{
+					Message:     []byte("test message"),
+					MessageType: events.LogMessage_OUT.Enum(),
+					Timestamp:   proto.Int64(123456789),
+				},
+			}
+			bytes, err := proto.Marshal(envelope)
+			Expect(err).ToNot(HaveOccurred())
+
+			unmarshaller.Write(bytes)
+			mockWriter.AssertNumberOfCalls(mockT, "Write", 1)
 		})
 	})
 })

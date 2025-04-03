@@ -20,7 +20,7 @@ var _ = Describe("ClientPool", func() {
 		var poolConns []clientpool.Conn
 		mockConns = make([]*mockConn, 0)
 		for i := 0; i < 5; i++ {
-			conn := newMockConn()
+			conn := NewConnMock()
 			mockConns = append(mockConns, conn)
 			poolConns = append(poolConns, conn)
 		}

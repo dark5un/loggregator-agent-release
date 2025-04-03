@@ -18,7 +18,7 @@ type mockConn struct {
 	}
 }
 
-func newMockConn() *mockConn {
+func NewConnMock() *mockConn {
 	m := &mockConn{}
 	m.WriteCalled = make(chan bool, 100)
 	m.WriteInput.Data = make(chan []byte, 100)
@@ -38,7 +38,7 @@ type mockCloser struct {
 	}
 }
 
-func newMockCloser() *mockCloser {
+func NewCloserMock() *mockCloser {
 	m := &mockCloser{}
 	m.CloseCalled = make(chan bool, 100)
 	m.CloseOutput.Ret0 = make(chan error, 100)
@@ -95,7 +95,7 @@ type mockDopplerIngestor_PusherClient struct {
 	}
 }
 
-func newMockDopplerIngestor_PusherClient() *mockDopplerIngestor_PusherClient {
+func NewDopplerIngestorMock_PusherClient() *mockDopplerIngestor_PusherClient {
 	m := &mockDopplerIngestor_PusherClient{}
 	m.SendCalled = make(chan bool, 100)
 	m.SendInput.Arg0 = make(chan *plumbing.EnvelopeData, 100)
@@ -165,7 +165,7 @@ type mockConnector struct {
 	}
 }
 
-func newMockConnector() *mockConnector {
+func NewConnectorMock() *mockConnector {
 	m := &mockConnector{}
 	m.ConnectCalled = make(chan bool, 100)
 	m.ConnectOutput.Ret0 = make(chan io.Closer, 100)

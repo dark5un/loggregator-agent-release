@@ -2,7 +2,10 @@ package v1_test
 
 import (
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1/mocks"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/testhelpers"
 	"github.com/cloudfoundry/sonde-go/events"
+	"github.com/stretchr/testify/mock"
 	"google.golang.org/protobuf/proto"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,103 +13,66 @@ import (
 )
 
 var _ = Describe("Tagger", func() {
-	It("tags events with the given deployment name, job, index and IP address", func() {
-		mockWriter := newMockEnvelopeWriter()
-		t := egress.NewTagger(
-			"test-deployment",
-			"test-job",
-			"2",
-			"123.123.123.123",
-			mockWriter,
-		)
-		envelope := &events.Envelope{
-			EventType: events.Envelope_ValueMetric.Enum(),
-			ValueMetric: &events.ValueMetric{
-				Name:  proto.String("metricName"),
-				Value: proto.Float64(2.0),
-				Unit:  proto.String("seconds"),
-			},
-		}
+	It("adds the deployment tag", func() {
+		mockT := testhelpers.NewMockTesting()
+		mockWriter := mocks.NewEnvelopeWriter(mockT)
+		mockWriter.On("Write", mock.AnythingOfType("*events.Envelope")).Return()
 
-		t.Write(envelope)
+		tagger := egress.NewTagger("my-dep", "my-job", "my-index", "my-ip", mockWriter)
 
-		Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-		expected := &events.Envelope{
-			EventType: events.Envelope_ValueMetric.Enum(),
-			ValueMetric: &events.ValueMetric{
-				Name:  proto.String("metricName"),
-				Value: proto.Float64(2.0),
-				Unit:  proto.String("seconds"),
-			},
-			Deployment: proto.String("test-deployment"),
-			Job:        proto.String("test-job"),
-			Index:      proto.String("2"),
-			Ip:         proto.String("123.123.123.123"),
-		}
-		Eventually(<-mockWriter.WriteInput.Event).Should(Equal(expected))
+		env := basicHttpStartStopEnvelope()
+		tagger.Write(env)
+
+		Expect(mockWriter.WriteCalledCount).To(Equal(1))
+		Expect(mockWriter.Envelopes[0].GetDeployment()).To(Equal("my-dep"))
 	})
 
-	Context("doesn't overwrite", func() {
-		var (
-			mockWriter *mockEnvelopeWriter
-			t          *egress.Tagger
-			envelope   *events.Envelope
-		)
+	It("adds the job tag", func() {
+		mockT := testhelpers.NewMockTesting()
+		mockWriter := mocks.NewEnvelopeWriter(mockT)
+		mockWriter.On("Write", mock.AnythingOfType("*events.Envelope")).Return()
 
-		BeforeEach(func() {
-			mockWriter = newMockEnvelopeWriter()
-			t = egress.NewTagger(
-				"test-deployment",
-				"test-job",
-				"2",
-				"123.123.123.123",
-				mockWriter,
-			)
+		tagger := egress.NewTagger("my-dep", "my-job", "my-index", "my-ip", mockWriter)
 
-			envelope = &events.Envelope{
-				EventType: events.Envelope_ValueMetric.Enum(),
-				ValueMetric: &events.ValueMetric{
-					Name:  proto.String("metricName"),
-					Value: proto.Float64(2.0),
-					Unit:  proto.String("seconds"),
-				},
-			}
-		})
+		env := basicHttpStartStopEnvelope()
+		tagger.Write(env)
 
-		It("when deployment is already set", func() {
-			envelope.Deployment = proto.String("another-deployment")
-			t.Write(envelope)
+		Expect(mockWriter.WriteCalledCount).To(Equal(1))
+		Expect(mockWriter.Envelopes[0].GetJob()).To(Equal("my-job"))
+	})
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
-			Eventually(*writtenEnvelope.Deployment).Should(Equal("another-deployment"))
-		})
+	It("adds the index tag", func() {
+		mockT := testhelpers.NewMockTesting()
+		mockWriter := mocks.NewEnvelopeWriter(mockT)
+		mockWriter.On("Write", mock.AnythingOfType("*events.Envelope")).Return()
 
-		It("when job is already set", func() {
-			envelope.Job = proto.String("another-job")
-			t.Write(envelope)
+		tagger := egress.NewTagger("my-dep", "my-job", "my-index", "my-ip", mockWriter)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
-			Eventually(*writtenEnvelope.Job).Should(Equal("another-job"))
-		})
+		env := basicHttpStartStopEnvelope()
+		tagger.Write(env)
 
-		It("when index is already set", func() {
-			envelope.Index = proto.String("3")
-			t.Write(envelope)
+		Expect(mockWriter.WriteCalledCount).To(Equal(1))
+		Expect(mockWriter.Envelopes[0].GetIndex()).To(Equal("my-index"))
+	})
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
-			Eventually(*writtenEnvelope.Index).Should(Equal("3"))
-		})
+	It("adds the IP tag", func() {
+		mockT := testhelpers.NewMockTesting()
+		mockWriter := mocks.NewEnvelopeWriter(mockT)
+		mockWriter.On("Write", mock.AnythingOfType("*events.Envelope")).Return()
 
-		It("when ip is already set", func() {
-			envelope.Ip = proto.String("1.1.1.1")
-			t.Write(envelope)
+		tagger := egress.NewTagger("my-dep", "my-job", "my-index", "my-ip", mockWriter)
 
-			Expect(mockWriter.WriteInput.Event).To(HaveLen(1))
-			writtenEnvelope := <-mockWriter.WriteInput.Event
-			Eventually(*writtenEnvelope.Ip).Should(Equal("1.1.1.1"))
-		})
+		env := basicHttpStartStopEnvelope()
+		tagger.Write(env)
+
+		Expect(mockWriter.WriteCalledCount).To(Equal(1))
+		Expect(mockWriter.Envelopes[0].GetIp()).To(Equal("my-ip"))
 	})
 })
+
+func basicHttpStartStopEnvelope() *events.Envelope {
+	return &events.Envelope{
+		Origin:    proto.String("some-origin"),
+		EventType: events.Envelope_HttpStartStop.Enum(),
+	}
+}
