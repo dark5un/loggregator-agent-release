@@ -1,4 +1,3 @@
-//go:generate hel
 package v1
 
 import (
@@ -8,6 +7,12 @@ import (
 	"github.com/cloudfoundry/sonde-go/events"
 	"google.golang.org/protobuf/proto"
 )
+
+// UnmarshallerReader is a reader that will read bytes from protobuf and
+// unmarshal.
+type UnmarshallerReader interface {
+	Read() ([]byte, error)
+}
 
 type EnvelopeWriter interface {
 	Write(event *events.Envelope)

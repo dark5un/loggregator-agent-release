@@ -9,6 +9,7 @@ import (
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/bindings"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/bindings/bindingsfakes"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -32,8 +33,9 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			{AppId: "app-id-with-good-drain", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "syslog://10.10.10.10"}},
 		}
 		bindingReader := &SpyBindingReader{bindings: input}
+		fakeIPChecker := &bindingsfakes.FakeIPChecker{}
 
-		filter = bindings.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, metrics, true, log)
+		filter = bindings.NewFilteredBindingFetcher(fakeIPChecker, bindingReader, metrics, true, log)
 		actual, err := filter.FetchBindings()
 
 		Expect(err).ToNot(HaveOccurred())
@@ -42,8 +44,9 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 	It("returns an error if the binding reader cannot fetch bindings", func() {
 		bindingReader := &SpyBindingReader{nil, errors.New("Woops")}
+		fakeIPChecker := &bindingsfakes.FakeIPChecker{}
 
-		filter := bindings.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, metrics, true, log)
+		filter := bindings.NewFilteredBindingFetcher(fakeIPChecker, bindingReader, metrics, true, log)
 		actual, err := filter.FetchBindings()
 
 		Expect(err).To(HaveOccurred())
@@ -53,11 +56,13 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	Context("when syslog drain is unparsable", func() {
 		var logBuffer bytes.Buffer
 		var warn bool
+		var fakeIPChecker *bindingsfakes.FakeIPChecker
 
 		BeforeEach(func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
+			fakeIPChecker = &bindingsfakes.FakeIPChecker{}
 		})
 
 		JustBeforeEach(func() {
@@ -65,7 +70,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "://"}},
 			}
 			filter = bindings.NewFilteredBindingFetcher(
-				&spyIPChecker{},
+				fakeIPChecker,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -97,11 +102,13 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	Context("when drain has no host", func() {
 		var logBuffer bytes.Buffer
 		var warn bool
+		var fakeIPChecker *bindingsfakes.FakeIPChecker
 
 		BeforeEach(func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
+			fakeIPChecker = &bindingsfakes.FakeIPChecker{}
 		})
 
 		JustBeforeEach(func() {
@@ -109,7 +116,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "https:///path"}},
 			}
 			filter = bindings.NewFilteredBindingFetcher(
-				&spyIPChecker{},
+				fakeIPChecker,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -140,9 +147,10 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 	Context("when syslog drain has unsupported scheme", func() {
 		var (
-			input     []syslog.Binding
-			logBuffer bytes.Buffer
-			warn      bool
+			input         []syslog.Binding
+			logBuffer     bytes.Buffer
+			warn          bool
+			fakeIPChecker *bindingsfakes.FakeIPChecker
 		)
 
 		BeforeEach(func() {
@@ -158,13 +166,14 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
+			fakeIPChecker = &bindingsfakes.FakeIPChecker{}
 
 			metrics = metricsHelpers.NewMetricsRegistry()
 		})
 
 		JustBeforeEach(func() {
 			filter = bindings.NewFilteredBindingFetcher(
-				&spyIPChecker{},
+				fakeIPChecker,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -195,15 +204,14 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	Context("when the drain host fails to resolve", func() {
 		var logBuffer bytes.Buffer
 		var warn bool
-		var mockic *mockIPChecker
+		var fakeIPChecker *bindingsfakes.FakeIPChecker
 
 		BeforeEach(func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
-			mockic = newMockIPChecker()
-			mockic.ResolveAddrOutput.Ret0 <- net.IP{}
-			mockic.ResolveAddrOutput.Ret1 <- errors.New("oof ouch ip not resolved")
+			fakeIPChecker = &bindingsfakes.FakeIPChecker{}
+			fakeIPChecker.ResolveAddrReturns(net.IP{}, errors.New("oof ouch ip not resolved"))
 		})
 
 		JustBeforeEach(func() {
@@ -211,7 +219,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "syslog://some.invalid.host"}},
 			}
 			filter = bindings.NewFilteredBindingFetcher(
-				mockic,
+				fakeIPChecker,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -232,7 +240,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			actual, err := filter.FetchBindings()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal([]syslog.Binding{}))
-			Eventually(mockic.ResolveAddrCalled).Should(Receive())
+			Expect(fakeIPChecker.ResolveAddrCallCount()).To(Equal(1))
 			Expect(logBuffer.String()).Should(MatchRegexp("Cannot resolve ip address for syslog drain with url"))
 			Expect(logBuffer.String()).ToNot(MatchRegexp("Skipped resolve ip address for syslog drain with url"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
@@ -240,7 +248,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			actual, err = filter.FetchBindings()
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(BeEmpty())
-			Consistently(mockic.ResolveAddrCalled).ShouldNot(Receive())
+			Expect(fakeIPChecker.ResolveAddrCallCount()).To(Equal(1))
 			Expect(logBuffer.String()).Should(MatchRegexp("Skipped resolve ip address for syslog drain with url"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(1.0))
 		})
@@ -260,11 +268,15 @@ var _ = Describe("FilteredBindingFetcher", func() {
 	Context("when the syslog drain has been blacklisted", func() {
 		var logBuffer bytes.Buffer
 		var warn bool
+		var fakeIPChecker *bindingsfakes.FakeIPChecker
 
 		BeforeEach(func() {
 			logBuffer = bytes.Buffer{}
 			log.SetOutput(&logBuffer)
 			warn = true
+			fakeIPChecker = &bindingsfakes.FakeIPChecker{}
+			fakeIPChecker.CheckBlacklistReturns(errors.New("blacklist error"))
+			fakeIPChecker.ResolveAddrReturns(net.ParseIP("127.0.0.1"), nil)
 		})
 
 		JustBeforeEach(func() {
@@ -273,10 +285,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			}
 
 			filter = bindings.NewFilteredBindingFetcher(
-				&spyIPChecker{
-					checkBlacklistError: errors.New("blacklist error"),
-					resolvedIP:          net.ParseIP("127.0.0.1"),
-				},
+				fakeIPChecker,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -307,20 +316,6 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		})
 	})
 })
-
-type spyIPChecker struct {
-	checkBlacklistError error
-	resolveAddrError    error
-	resolvedIP          net.IP
-}
-
-func (s *spyIPChecker) CheckBlacklist(net.IP) error {
-	return s.checkBlacklistError
-}
-
-func (s *spyIPChecker) ResolveAddr(host string) (net.IP, error) {
-	return s.resolvedIP, s.resolveAddrError
-}
 
 type SpyBindingReader struct {
 	bindings []syslog.Binding

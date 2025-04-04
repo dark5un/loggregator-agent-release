@@ -7,6 +7,7 @@ import (
 	"code.cloudfoundry.org/go-loggregator/v10/rpc/loggregator_v2"
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
 	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v2"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v2/v2fakes"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -15,19 +16,57 @@ import (
 var _ = Describe("Transponder", func() {
 	It("reads from the buffer to the writer", func() {
 		envelope := &loggregator_v2.Envelope{SourceId: "uuid"}
-		nexter := newMockNexter()
-		nexter.TryNextOutput.Ret0 <- envelope
-		nexter.TryNextOutput.Ret1 <- true
-		writer := newMockBatchWriter()
-		close(writer.WriteOutput.Ret0)
+		fakeNexter := new(v2fakes.FakeNexter)
+		fakeNexter.TryNextReturns(envelope, true)
+
+		fakeBatchWriter := new(v2fakes.FakeBatchWriter)
+		spy := metricsHelpers.NewMetricsRegistry()
+
+		tx := egress.NewTransponder(fakeNexter, fakeBatchWriter, 1, time.Nanosecond, spy)
+		go tx.Start()
+
+		Eventually(fakeNexter.TryNextCallCount).Should(BeNumerically(">", 0))
+		Eventually(fakeBatchWriter.WriteCallCount).Should(BeNumerically(">", 0))
+		Eventually(func() []*loggregator_v2.Envelope {
+			return fakeBatchWriter.WriteArgsForCall(0)
+		}).Should(Equal([]*loggregator_v2.Envelope{envelope}))
+	})
+
+	It("emits a metric for dropped messages", func() {
+		fakeNexter := new(v2fakes.FakeNexter)
+		fakeNexter.TryNextReturns(nil, false)
+
+		fakeBatchWriter := new(v2fakes.FakeBatchWriter)
+		fakeBatchWriter.WriteReturns(errors.New("error"))
 
 		spy := metricsHelpers.NewMetricsRegistry()
 
-		tx := egress.NewTransponder(nexter, writer, 1, time.Nanosecond, spy)
+		tx := egress.NewTransponder(fakeNexter, fakeBatchWriter, 1, time.Nanosecond, spy)
 		go tx.Start()
 
-		Eventually(nexter.TryNextCalled).Should(Receive())
-		Eventually(writer.WriteInput.Msgs).Should(Receive(Equal([]*loggregator_v2.Envelope{envelope})))
+		fakeNexter.TryNextReturns(
+			&loggregator_v2.Envelope{SourceId: "uuid"},
+			true,
+		)
+
+		Eventually(func() float64 {
+			return spy.GetMetric("dropped", map[string]string{"direction": "egress", "metric_version": "2.0"}).Value()
+		}).Should(BeNumerically(">", 0))
+	})
+
+	It("emits a metric for written messages", func() {
+		fakeNexter := new(v2fakes.FakeNexter)
+		fakeNexter.TryNextReturns(&loggregator_v2.Envelope{SourceId: "uuid"}, true)
+
+		fakeBatchWriter := new(v2fakes.FakeBatchWriter)
+		spy := metricsHelpers.NewMetricsRegistry()
+
+		tx := egress.NewTransponder(fakeNexter, fakeBatchWriter, 1, time.Nanosecond, spy)
+		go tx.Start()
+
+		Eventually(func() float64 {
+			return spy.GetMetric("egress", map[string]string{"metric_version": "2.0"}).Value()
+		}).Should(BeNumerically(">", 0))
 	})
 
 	Describe("batching", func() {

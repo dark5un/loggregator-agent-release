@@ -1,91 +1,80 @@
 package v1_test
 
 import (
+	"errors"
+
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
-	egress "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
+	v1 "code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/v1/v1fakes"
 	"github.com/cloudfoundry/sonde-go/events"
-	"google.golang.org/protobuf/proto"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+	"google.golang.org/protobuf/proto"
 )
 
 var _ = Describe("EventMarshaller", func() {
 	var (
-		marshaller      *egress.EventMarshaller
-		mockChainWriter *mockBatchChainByteWriter
+		marshaller      *v1.EventMarshaller
 		metricClient    *metricsHelpers.SpyMetricsRegistry
+		fakeBytesWriter *v1fakes.FakeBatchChainByteWriter
+		envelope        *events.Envelope
 	)
 
 	BeforeEach(func() {
-		mockChainWriter = newMockBatchChainByteWriter()
+		fakeBytesWriter = new(v1fakes.FakeBatchChainByteWriter)
 		metricClient = metricsHelpers.NewMetricsRegistry()
-	})
+		marshaller = v1.NewMarshaller(metricClient)
+		marshaller.SetWriter(fakeBytesWriter)
 
-	JustBeforeEach(func() {
-		marshaller = egress.NewMarshaller(metricClient)
-		marshaller.SetWriter(mockChainWriter)
+		envelope = &events.Envelope{
+			Origin:    proto.String("origin"),
+			EventType: events.Envelope_HttpStartStop.Enum(),
+			ValueMetric: &events.ValueMetric{
+				Name:  proto.String("name"),
+				Value: proto.Float64(0),
+				Unit:  proto.String("unit"),
+			},
+		}
 	})
 
 	Describe("Write", func() {
-		var envelope *events.Envelope
-
-		Context("with a nil writer", func() {
-			BeforeEach(func() {
-				envelope = &events.Envelope{
-					Origin:    proto.String("The Negative Zone"),
-					EventType: events.Envelope_LogMessage.Enum(),
-				}
-			})
-
-			JustBeforeEach(func() {
-				marshaller.SetWriter(nil)
-			})
-
-			It("does not panic", func() {
-				Expect(func() {
-					marshaller.Write(envelope)
-				}).ToNot(Panic())
-			})
-		})
-
-		Context("with an invalid envelope", func() {
-			BeforeEach(func() {
-				envelope = &events.Envelope{}
-				close(mockChainWriter.WriteOutput.Err)
-			})
-
-			It("doesn't write the bytes", func() {
-				marshaller.Write(envelope)
-				Consistently(mockChainWriter.WriteCalled).ShouldNot(Receive())
-			})
-		})
-
 		Context("with writer", func() {
+			var err error
+			var message []byte
+
 			BeforeEach(func() {
-				close(mockChainWriter.WriteOutput.Err)
-				envelope = &events.Envelope{
-					Origin:    proto.String("The Negative Zone"),
-					EventType: events.Envelope_LogMessage.Enum(),
-				}
+				message, err = proto.Marshal(envelope)
+				Expect(err).ToNot(HaveOccurred())
 			})
 
 			It("writes messages to the writer", func() {
 				marshaller.Write(envelope)
-				expected, err := proto.Marshal(envelope)
-				Expect(err).ToNot(HaveOccurred())
-				Expect(mockChainWriter.WriteInput.Message).To(Receive(Equal(expected)))
+
+				Expect(fakeBytesWriter.WriteCallCount()).To(Equal(1))
+				Expect(fakeBytesWriter.WriteArgsForCall(0)).To(Equal(message))
 
 				metric := metricClient.GetMetric("egress", map[string]string{"metric_version": "1.0"})
 				Expect(metric.Value()).To(Equal(float64(1)))
+			})
+
+			It("returns an error when the writer fails", func() {
+				fakeBytesWriter.WriteReturns(errors.New("boom"))
+
+				marshaller.Write(envelope)
+
+				Expect(fakeBytesWriter.WriteCallCount()).To(Equal(1))
+				Expect(fakeBytesWriter.WriteArgsForCall(0)).To(Equal(message))
+
+				metric := metricClient.GetMetric("egress", map[string]string{"metric_version": "1.0"})
+				Expect(metric.Value()).To(Equal(float64(0)))
 			})
 		})
 	})
 
 	Describe("SetWriter", func() {
 		It("writes to the new writer", func() {
-			newWriter := newMockBatchChainByteWriter()
-			close(newWriter.WriteOutput.Err)
+			newWriter := new(v1fakes.FakeBatchChainByteWriter)
 			marshaller.SetWriter(newWriter)
 
 			envelope := &events.Envelope{
@@ -96,8 +85,9 @@ var _ = Describe("EventMarshaller", func() {
 
 			expected, err := proto.Marshal(envelope)
 			Expect(err).ToNot(HaveOccurred())
-			Consistently(mockChainWriter.WriteInput.Message).ShouldNot(Receive())
-			Eventually(newWriter.WriteInput.Message).Should(Receive(Equal(expected)))
+			Expect(fakeBytesWriter.WriteCallCount()).To(Equal(0))
+			Expect(newWriter.WriteCallCount()).To(Equal(1))
+			Expect(newWriter.WriteArgsForCall(0)).To(Equal(expected))
 		})
 	})
 })

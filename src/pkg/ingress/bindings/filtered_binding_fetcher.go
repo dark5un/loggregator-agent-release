@@ -12,8 +12,6 @@ import (
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/simplecache"
 )
 
-//go:generate hel --type IPChecker
-
 var allowedSchemes = []string{"syslog", "syslog-tls", "https", "https-batch"}
 
 type IPChecker interface {
