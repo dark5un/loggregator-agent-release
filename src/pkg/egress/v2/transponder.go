@@ -9,10 +9,12 @@ import (
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/plumbing/batching"
 )
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o v2fakes/fake_nexter.go . Nexter
 type Nexter interface {
 	TryNext() (*loggregator_v2.Envelope, bool)
 }
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o v2fakes/fake_batch_writer.go . BatchWriter
 type BatchWriter interface {
 	Write(msgs []*loggregator_v2.Envelope) error
 }

@@ -14,6 +14,7 @@ import (
 
 var allowedSchemes = []string{"syslog", "syslog-tls", "https", "https-batch"}
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o bindingsfakes/fake_ip_checker.go . IPChecker
 type IPChecker interface {
 	ResolveAddr(host string) (net.IP, error)
 	CheckBlacklist(ip net.IP) error

@@ -2,10 +2,12 @@ package v2
 
 import "code.cloudfoundry.org/go-loggregator/v10/rpc/loggregator_v2"
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o v2fakes/fake_writer.go . Writer
 type Writer interface {
 	Write(*loggregator_v2.Envelope) error
 }
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o v2fakes/fake_envelope_processor.go . EnvelopeProcessor
 type EnvelopeProcessor interface {
 	Process(*loggregator_v2.Envelope) error
 }

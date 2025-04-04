@@ -19,6 +19,8 @@ type Metrics interface {
 }
 
 // Getter is configured to fetch HTTP responses
+//
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o bindingsfakes/fake_getter.go . Getter
 type Getter interface {
 	Get() ([]binding.Binding, error)
 }

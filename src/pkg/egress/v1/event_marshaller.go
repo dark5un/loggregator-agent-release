@@ -15,6 +15,7 @@ type MetricClient interface {
 	NewCounter(name, helpText string, opts ...metrics.MetricOption) metrics.Counter
 }
 
+//go:generate go run github.com/maxbrunsfeld/counterfeiter/v6 -o v1fakes/fake_batch_chain_byte_writer.go . BatchChainByteWriter
 type BatchChainByteWriter interface {
 	Write(message []byte) (err error)
 }
